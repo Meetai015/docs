@@ -1,0 +1,166 @@
+---
+title: "Users API"
+description: "User and team management API endpoints"
+icon: "users"
+openapi: "GET /users"
+---
+
+# Users API
+
+User and team management API endpoints.
+
+## Overview
+
+The users API handles:
+- User profile management
+- Team operations
+- Role assignments
+- Permission checking
+- Bulk user import
+
+---
+
+## Endpoints
+
+### GET /users/all
+
+List all users in the organization.
+
+**Request:**
+```http
+GET /api/v1/users/all
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "message": "Organisation users",
+  "users": [
+    {
+      "u_id": "user-uuid",
+      "u_first_name": "John",
+      "u_last_name": "Doe",
+      "u_email": "john@example.com",
+      "u_role": "admin",
+      "status": "Active",
+      "teams": [{"tm_id": "...", "tm_name": "Sales"}]
+    }
+  ]
+}
+```
+
+### POST /users/add
+
+Add a new user to the organization.
+
+**Request:**
+```json
+POST /api/v1/users/add
+
+{
+  "u_id": "admin-user-id",
+  "u_first_name": "Jane",
+  "u_last_name": "Smith",
+  "u_email": "jane@example.com",
+  "r_id": "role-uuid"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "message": "User added successfully",
+  "u_id": "new-user-uuid"
+}
+```
+
+### POST /users/bulk-add
+
+Bulk import users from CSV.
+
+**Request:**
+```http
+POST /api/v1/users/bulk-add
+Authorization: Bearer {token}
+Content-Type: multipart/form-data
+```
+
+**Form Data:**
+- `csv_file`: CSV file with user data
+- `first_name_column`: Column name for first name
+- `last_name_column`: Column name for last name
+- `email_column`: Column name for email
+- `role_column`: Column name for role
+
+**CSV Format:**
+```csv
+First Name,Last Name,Email,Role
+John,Doe,john@example.com,Agent
+Jane,Smith,jane@example.com,Manager
+```
+
+**Response:**
+```json
+{
+  "created_count": 10,
+  "failed_count": 2,
+  "failed_rows": [3, 7]
+}
+```
+
+---
+
+## Teams
+
+### POST /teams/create
+
+Create a new team.
+
+**Request:**
+```json
+POST /api/v1/teams/create
+
+{
+  "tm_name": "Sales Team",
+  "tm_org_id": "org-uuid"
+}
+```
+
+### GET /teams/all
+
+List all teams.
+
+**Response:**
+```json
+{
+  "teams": [
+    {
+      "tm_id": "team-uuid",
+      "tm_name": "Sales Team",
+      "member_count": 5
+    }
+  ]
+}
+```
+
+### POST /teams/add-members
+
+Add members to a team.
+
+**Request:**
+```json
+POST /api/v1/teams/add-members
+
+{
+  "tm_id": "team-uuid",
+  "user_ids": ["user-uuid-1", "user-uuid-2"]
+}
+```
+
+---
+
+## Next Steps
+
+- Learn about [Organizations API](/api-reference/organizations)
+- Explore [Authentication](/api-reference/authentication)

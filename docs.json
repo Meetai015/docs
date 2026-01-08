@@ -68,6 +68,14 @@
               "frontend/build",
               "frontend/deployment"
             ]
+          },
+          {
+            "group": "Code Reference",
+            "pages": [
+              "frontend/code-examples",
+              "frontend/patterns",
+              "frontend/component-reference"
+            ]
           }
         ]
       },
@@ -103,6 +111,14 @@
               "backend/deployment",
               "backend/monitoring"
             ]
+          },
+          {
+            "group": "Code Reference",
+            "pages": [
+              "backend/code-examples",
+              "backend/patterns",
+              "backend/services"
+            ]
           }
         ]
       },
@@ -110,13 +126,32 @@
         "tab": "API Reference",
         "groups": [
           {
-            "group": "API Documentation",
+            "group": "Getting Started",
             "pages": [
-              "api-reference/introduction"
+              "api-reference/introduction",
+              "api-reference/authentication",
+              "api-reference/error-handling"
             ]
           },
           {
-            "group": "Endpoints",
+            "group": "Core APIs",
+            "pages": [
+              "api-reference/meetings",
+              "api-reference/reports",
+              "api-reference/users",
+              "api-reference/organizations"
+            ]
+          },
+          {
+            "group": "Advanced APIs",
+            "pages": [
+              "api-reference/objects",
+              "api-reference/webhooks",
+              "api-reference/tickets"
+            ]
+          },
+          {
+            "group": "Endpoint Examples",
             "pages": [
               "api-reference/endpoint/get",
               "api-reference/endpoint/create",

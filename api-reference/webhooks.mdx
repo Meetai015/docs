@@ -1,0 +1,501 @@
+---
+title: "Webhooks API"
+description: "Webhook integrations and event handling"
+icon: "webhook"
+---
+
+# Webhooks API
+
+Webhook endpoints for integrating with external services.
+
+## Overview
+
+Gistly supports webhooks from:
+- **8x8** - VoIP integration
+- **Upgrad** - Education platform integration
+- **Freshdesk** - Ticketing system
+- **Cashfree** - Payment gateway
+- **Google Meet** - Video conferencing
+- **Zoom** - Video conferencing
+
+All webhooks include security validation and support asynchronous processing.
+
+---
+
+## 8x8 Webhook
+
+### POST /meetings/meeting/8x8/upload
+
+Receives meeting recording from 8x8 VoIP system.
+
+**Authentication:** API key in header
+
+**Request:**
+```http
+POST /api/v1/meetings/meeting/8x8/upload
+X-API-Key: {your-api-key}
+Content-Type: application/json
+
+{
+  "call_id": "8x8-call-123",
+  "recording_url": "https://8x8.com/recordings/call-123.mp3",
+  "participant_email": "agent@company.com",
+  "start_time": "2024-01-15T10:00:00Z",
+  "end_time": "2024-01-15T10:30:00Z",
+  "duration_seconds": 1800,
+  "direction": "inbound"
+}
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "message": "8x8 meeting queued for processing",
+  "m_id": "new-meeting-uuid",
+  "status": "RECORDING_IN_PROGRESS"
+}
+```
+
+**Processing Flow:**
+1. Validate API key
+2. Check for duplicate call_id
+3. Download recording from 8x8
+4. Create meeting record
+5. Queue for transcription and analysis
+6. Send notification when complete
+
+**Service Code:**
+```python
+# app/routes/meeting_routes.py
+
+@meeting_routes.route("/meetings/meeting/8x8/upload", methods=["POST"])
+def handle_8x8_meeting():
+    """
+    Handle 8x8 webhook for meeting recording.
+    """
+    try:
+        # Validate API key
+        api_key = request.headers.get('X-API-Key')
+        if not validate_api_key(api_key):
+            return jsonify({"message": "Invalid API key"}), 401
+
+        data = request.get_json()
+
+        # Extract meeting info
+        call_id = data.get('call_id')
+        recording_url = data.get('recording_url')
+        participant_email = data.get('participant_email')
+        start_time = data.get('start_time')
+        end_time = data.get('end_time')
+
+        # Check for duplicate
+        existing = Meeting.query.filter_by(
+            m_external_id=call_id,
+            m_source='8x8'
+        ).first()
+
+        if existing:
+            return jsonify({
+                "message": "Meeting already exists",
+                "m_id": str(existing.m_id)
+            }), 200
+
+        # Create meeting
+        meeting = Meeting(
+            m_name=f"8x8 Call - {participant_email}",
+            m_external_id=call_id,
+            m_source='8x8',
+            m_start_time=start_time,
+            m_end_time=end_time,
+            m_participants=[participant_email]
+        )
+
+        db.session.add(meeting)
+        db.session.commit()
+
+        # Queue processing
+        process_8x8_recording.delay(meeting.m_id, recording_url)
+
+        return jsonify({
+            "message": "8x8 meeting queued for processing",
+            "m_id": str(meeting.m_id)
+        }), 202
+
+    except Exception as e:
+        logger.error(f"Error processing 8x8 webhook: {str(e)}")
+        return jsonify({"message": "Failed to process webhook"}), 500
+```
+
+---
+
+## Upgrad Webhook
+
+### POST /upgrad/webhook
+
+Receives learner counseling calls from Upgrad platform.
+
+**Authentication:** API key
+
+**Request:**
+```http
+POST /api/v1/upgrad/webhook
+X-API-Key: {your-api-key}
+Content-Type: multipart/form-data
+
+{
+  "counsellor_email": "counsellor@upgrad.com",
+  "learner_email": "learner@email.com",
+  "learner_phone": "+91-98765-43210",
+  "lead_id": "lead-123",
+  "call_start_time": "2024-01-15T10:00:00Z",
+  "call_status_before": "interested",
+  "call_status_after": "converted",
+  "recording": <file>
+}
+```
+
+**Field Mappings:**
+Upgrad uses space-separated field names that are normalized:
+- `source media campaign details` → `source_media_campaign_details`
+- `call status before and after` → `call_status_before_and_after`
+
+**Response (202 Accepted):**
+```json
+{
+  "message": "Upgrad call received",
+  "m_id": "new-meeting-uuid"
+}
+```
+
+---
+
+## Freshdesk Webhooks
+
+### Ticket Created
+
+```http
+POST /api/v1/freshdesk/webhooks/ticket-created
+X-Freshdesk-API-Key: {your-api-key}
+
+{
+  "ticket_id": 12345,
+  "subject": "Login issue",
+  "description": "User cannot access account",
+  "status": "Open",
+  "priority": "High",
+  "requester": {
+    "id": 98765,
+    "name": "John Doe",
+    "email": "john@example.com"
+  },
+  "created_at": "2024-01-15T10:00:00Z"
+}
+```
+
+### Ticket Updated
+
+```http
+POST /api/v1/freshdesk/webhooks/ticket-updated
+
+{
+  "ticket_id": 12345,
+  "changes": {
+    "status": {
+      "from": "Open",
+      "to": "Resolved"
+    }
+  }
+}
+```
+
+### Conversation Updated
+
+```http
+POST /api/v1/freshdesk/webhooks/conversation-updated
+
+{
+  "ticket_id": 12345,
+  "conversation_id": 67890,
+  "body": "Here's the update...",
+  "from": "agent@company.com"
+}
+```
+
+---
+
+## Cashfree Webhook
+
+### POST /api/cashfree/webhooks/tickets
+
+Receives Freshdesk ticket updates via Cashfree integration.
+
+**Authentication:** API key + Org ID
+
+**Request:**
+```http
+POST /api/v1/cashfree/webhooks/tickets
+X-API-Key: {your-api-key}
+X-Org-Id: {org-uuid}
+
+{
+  "ticket_id": 12345,
+  "subject": "Payment issue",
+  "status": "Open",
+  "priority": "Urgent",
+  "custom_fields": {
+    "cf_amount": "5000",
+    "cf_transaction_id": "txn-123"
+  }
+}
+```
+
+**Security:**
+- Validates API key
+- Checks org_id membership
+- Runs every 6 hours for batch sync
+
+**Service Code:**
+```python
+# app/routes/cashfree_routes.py
+
+@cashfree_routes.route("/webhooks/tickets", methods=["POST"])
+def process_cashfree_ticket():
+    """
+    Process Freshdesk ticket via Cashfree integration.
+    """
+    try:
+        # Validate API key
+        api_key = request.headers.get('X-API-Key')
+        org_id = request.headers.get('X-Org-Id')
+
+        # Get org by API key
+        org = Organisation.query.filter_by(
+            api_key=api_key,
+            org_id=org_id
+        ).first()
+
+        if not org:
+            return jsonify({"message": "Invalid credentials"}), 401
+
+        # Get ticket data
+        ticket_data = request.get_json()
+
+        # Store raw payload
+        ticket = Ticket(
+            t_org_id=org.org_id,
+            t_source='cashfree',
+            t_external_id=str(ticket_data['ticket_id']),
+            t_subject=ticket_data['subject'],
+            t_status=ticket_data['status'],
+            t_raw_payload=ticket_data
+        )
+
+        db.session.add(ticket)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Ticket stored successfully",
+            "t_id": str(ticket.t_id)
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Error processing Cashfree webhook: {str(e)}")
+        return jsonify({"message": "Failed to process ticket"}), 500
+```
+
+---
+
+## Webhook Security
+
+### API Key Validation
+
+All webhooks require API key authentication:
+
+```python
+def validate_webhook_api_key(api_key: str, org_id: str = None) -> bool:
+    """
+    Validate webhook API key.
+    """
+    query = Organisation.query.filter_by(api_key=api_key)
+
+    if org_id:
+        query = query.filter_by(org_id=org_id)
+
+    org = query.first()
+
+    if not org:
+        return False
+
+    # Check if webhook is enabled
+    if not org.webhooks_enabled:
+        return False
+
+    return True
+```
+
+### HMAC Signature Verification (Recommended)
+
+For enhanced security, verify HMAC signatures:
+
+```python
+import hmac
+import hashlib
+
+def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """
+    Verify webhook HMAC signature.
+    """
+    expected = hmac.new(
+        secret.encode(),
+        payload,
+        hashlib.sha256
+    ).hexdigest()
+
+    return hmac.compare_digest(expected, signature)
+```
+
+---
+
+## Integration State Tracking
+
+Track last successful webhook run for incremental sync:
+
+```python
+# app/models/IntegrationState
+
+class IntegrationState(db.Model):
+    __tablename__ = 'integration_states'
+
+    is_id = db.Column(db.Integer, primary_key=True)
+    is_org_id = db.Column(db.UUID, db.ForeignKey('organisations.org_id'))
+    is_integration_type = db.Column(db.String)  # '8x8', 'upgrad', etc.
+    is_last_successful_run = db.Column(db.DateTime)
+    is_last_cursor = db.Column(db.String)  # For pagination/offset
+    is_config = db.Column(db.JSON)  # Integration-specific config
+```
+
+**Usage:**
+```python
+# Get last run time
+state = IntegrationState.query.filter_by(
+    is_org_id=org_id,
+    is_integration_type='8x8'
+).first()
+
+if state:
+    from_date = state.is_last_successful_run
+else:
+    from_date = None  # Full sync
+
+# Process records...
+# Update state
+state.is_last_successful_run = datetime.utcnow()
+db.session.commit()
+```
+
+---
+
+## Retry Logic
+
+Implement exponential backoff for failed webhooks:
+
+```python
+import time
+from functools import wraps
+
+def retry_webhook(max_retries=3, delay=1):
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return f(*args, **kwargs)
+                except Exception as e:
+                    retries += 1
+                    if retries >= max_retries:
+                        raise
+                    wait_time = delay * (2 ** retries)
+                    logger.warning(f"Retry {retries}/{max_retries} after {wait_time}s")
+                    time.sleep(wait_time)
+        return wrapper
+    return decorator
+```
+
+---
+
+## Testing Webhooks
+
+### Local Testing with ngrok
+
+```bash
+# Start ngrok
+ngrok http 8000
+
+# Use ngrok URL in webhook configuration
+# https://abc123.ngrok.io/api/v1/meetings/meeting/8x8/upload
+```
+
+### Testing with cURL
+
+```bash
+# Test 8x8 webhook
+curl -X POST https://api.gistly.ai/api/v1/meetings/meeting/8x8/upload \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "call_id": "test-123",
+    "recording_url": "https://example.com/recording.mp3",
+    "participant_email": "test@example.com",
+    "start_time": "2024-01-15T10:00:00Z",
+    "end_time": "2024-01-15T10:30:00Z"
+  }'
+```
+
+---
+
+## Webhook Management
+
+### Configure Webhooks
+
+Webhook configuration is done at the organization level:
+
+```python
+# Organization model
+org.webhooks_enabled = True
+org.webhook_config = {
+    '8x8': {
+        'enabled': True,
+        'api_key': 'secret-key'
+    },
+    'upgrad': {
+        'enabled': True,
+        'api_key': 'secret-key'
+    }
+}
+```
+
+### Webhook Logs
+
+Track all webhook events:
+
+```python
+# app/models/WebhookLog
+
+class WebhookLog(db.Model):
+    wl_id = db.Column(db.Integer, primary_key=True)
+    wl_org_id = db.Column(db.UUID)
+    wl_webhook_type = db.Column(db.String)
+    wl_payload = db.Column(db.JSON)
+    wl_status_code = db.Column(db.Integer)
+    wl_response = db.Column(db.Text)
+    wl_created_at = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+---
+
+## Next Steps
+
+- Learn about [Object System API](/api-reference/objects)
+- Explore [Backend Services](/backend/services)
+- Review [Error Handling](/api-reference/error-handling)

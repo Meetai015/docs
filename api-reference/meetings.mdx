@@ -1,0 +1,537 @@
+---
+title: "Meetings API"
+description: "Meeting management API endpoints"
+icon: "users"
+openapi: "GET /meetings"
+---
+
+# Meetings API
+
+Complete meetings API documentation for Gistly Call Analytics.
+
+## Overview
+
+The meetings API handles:
+- Meeting CRUD operations
+- File upload (audio/video)
+- Meeting sharing
+- Speaker mapping
+- Red flag detection
+- Transcription management
+
+---
+
+## Endpoints
+
+### GET /meetings/all
+
+List all meetings with filtering, pagination, and sorting.
+
+**Authentication:** Required (`JWT` or `API Key`)
+
+**Request:**
+```http
+GET /api/v1/meetings/all?from_date=2024-01-01&to_date=2024-01-31&page=1&page_size=20
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `from_date` | string | No | Start date (YYYY-MM-DD) |
+| `to_date` | string | No | End date (YYYY-MM-DD) |
+| `page` | integer | No | Page number (default: 1) |
+| `page_size` | integer | No | Items per page (default: 10, max: 100) |
+| `search` | string | No | Search in name, description, transcript |
+| `min_duration` | integer | No | Minimum duration in seconds |
+| `max_duration` | integer | No | Maximum duration in seconds |
+| `sort_by` | string | No | Sort field: `date`, `duration`, `name` |
+| `sort_order` | string | No | Sort order: `asc`, `desc` (default: `desc`) |
+| `agents` | array | No | Filter by agent UUIDs |
+| `red_flag_severities` | array | No | Filter by severity levels |
+| `red_flag_only` | boolean | No | Only show meetings with red flags |
+| `red_flag_ids` | array | No | Filter by specific red flag IDs |
+
+**Response (200 OK):**
+```json
+{
+  "message": "Meetings fetched successfully.",
+  "meetings": [
+    {
+      "m_id": "550e8400-e29b-41d4-a716-446655440000",
+      "m_name": "Sales Call - Acme Corp",
+      "m_start_time": "2024-01-15T10:00:00Z",
+      "m_end_time": "2024-01-15T10:45:00Z",
+      "m_duration": 2700,
+      "m_status": "completed",
+      "m_participants": ["john@example.com", "jane@acme.com"],
+      "m_url": "https://meet.google.com/abc-xyz",
+      "transcription": {
+        "t_m_id": "550e8400-e29b-41d4-a716-446655440000",
+        "t_transcript": "Full transcript text...",
+        "t_summary": "Call summary..."
+      },
+      "video": {
+        "v_url": "https://s3.amazonaws.com/...",
+        "v_format": "mp4"
+      },
+      "red_flags": [
+        {
+          "rf_title": "Pricing Concern",
+          "drf_severity": "High"
+        }
+      ],
+      "scores": {
+        "total_score": 75.5,
+        "categories": [
+          {"name": "Opening", "score": 80},
+          {"name": "Closing", "score": 70}
+        ]
+      },
+      "permissions": {
+        "can_view": true,
+        "can_edit": true,
+        "can_delete": false
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total_count": 150,
+    "total_pages": 8,
+    "has_more": true
+  }
+}
+```
+
+**Service Code:**
+```python
+# app/services/meeting_services.py
+
+def get_all_meetings(data: dict) -> tuple:
+    """
+    Fetch meetings with filtering, pagination, and sorting.
+    """
+    try:
+        user_id = g.user_model.u_id
+        permissions = g.user_permissions
+
+        # Get accessible meeting IDs based on permissions
+        accessible_ids = get_accessible_meeting_ids(permissions, user_id)
+
+        # Build query with filters
+        query = Meeting.query.filter(Meeting.m_id.in_(accessible_ids))
+
+        # Apply date range filter
+        if data.get('from_date'):
+            query = query.filter(Meeting.m_start_time >= data['from_date'])
+        if data.get('to_date'):
+            query = query.filter(Meeting.m_end_time <= data['to_date'])
+
+        # Apply red flag filter
+        if data.get('red_flag_only'):
+            flagged_ids = db.session.query(DetectedRedFlag.drf_m_id).distinct().all()
+            query = query.filter(Meeting.m_id.in_(flagged_ids))
+
+        # Apply search
+        if data.get('search'):
+            search_term = f"%{data['search']}%"
+            query = query.join(Transcription).filter(
+                db.or_(
+                    Meeting.m_name.ilike(search_term),
+                    Transcription.t_transcript.ilike(search_term)
+                )
+            )
+
+        # Apply sorting
+        sort_by = data.get('sort_by', 'date')
+        sort_order = data.get('sort_order', 'desc')
+        if sort_by == 'date':
+            order_col = Meeting.m_start_time.desc() if sort_order == 'desc' else Meeting.m_start_time.asc()
+        elif sort_by == 'duration':
+            order_col = Meeting.m_duration.desc() if sort_order == 'desc' else Meeting.m_duration.asc()
+        else:
+            order_col = Meeting.m_name.desc() if sort_order == 'desc' else Meeting.m_name.asc()
+
+        query = query.order_by(order_col)
+
+        # Paginate
+        page = int(data.get('page', 1))
+        page_size = int(data.get('page_size', 10))
+
+        total_count = query.count()
+        meetings = query.offset((page - 1) * page_size).limit(page_size).all()
+
+        return jsonify({
+            "message": "Meetings fetched successfully.",
+            "meetings": [meeting.to_dict() for meeting in meetings],
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total_count": total_count,
+                "total_pages": math.ceil(total_count / page_size),
+                "has_more": page * page_size < total_count
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching meetings: {str(e)}")
+        return jsonify({"message": "Failed to fetch meetings"}), 500
+```
+
+---
+
+### GET /meetings/today
+
+Get today's meetings for quick access.
+
+**Request:**
+```http
+GET /api/v1/meetings/today
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "message": "Today's meetings",
+  "meetings": [...],
+  "count": 5
+}
+```
+
+---
+
+### POST /meetings/upload-meeting
+
+Upload a meeting recording file.
+
+**Authentication:** Required
+
+**Request:**
+```http
+POST /api/v1/meetings/upload-meeting
+Authorization: Bearer {token}
+Content-Type: multipart/form-data
+```
+
+**Form Data:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | file | Yes | Audio/video file |
+| `m_name` | string | Yes | Meeting name |
+| `m_start_time` | string | Yes | Start time (ISO 8601) |
+| `m_end_time` | string | Yes | End time (ISO 8601) |
+| `m_participants` | string | No | Comma-separated emails |
+| `m_description` | string | No | Meeting description |
+
+**Response (201 Created):**
+```json
+{
+  "message": "Meeting uploaded successfully",
+  "m_id": "550e8400-e29b-41d4-a716-446655440000",
+  "m_status": "RECORDING_IN_PROGRESS",
+  "estimated_processing_time": "5-10 minutes"
+}
+```
+
+**Supported Formats:**
+- Audio: mp3, wav, aac, m4a, ogg, flac
+- Video: mp4, mkv, avi, mov, wmv, flv, webm
+
+**Processing Pipeline:**
+1. File uploaded to S3
+2. Transcription queued
+3. Summary generated
+4. Quality scores calculated
+5. Red flags detected
+6. Notification sent
+
+---
+
+### POST /meetings/upload-bulk-meetings
+
+Upload multiple meetings at once.
+
+**Request:**
+```http
+POST /api/v1/meetings/upload-bulk-meetings
+Authorization: Bearer {token}
+Content-Type: multipart/form-data
+```
+
+**Form Data:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `files` | file[] | Yes | Multiple files |
+| `sa_id` | string | No | Upload for different user (admin only) |
+| `tp_id` | string | No | Scoring template ID |
+| `a_tp_id` | string | No | Affinity template ID |
+
+**Response (202 Accepted):**
+```json
+{
+  "message": "Bulk upload started",
+  "batch_id": "batch-123",
+  "file_count": 10,
+  "estimated_time": "30-50 minutes"
+}
+```
+
+---
+
+### GET /meetings/meeting/get
+
+Get detailed meeting information.
+
+**Request:**
+```http
+GET /api/v1/meetings/meeting/get?m_id={meeting_id}
+Authorization: Bearer {token}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Meeting details",
+  "meeting": {
+    "m_id": "...",
+    "m_name": "Sales Call",
+    "m_start_time": "2024-01-15T10:00:00Z",
+    "m_end_time": "2024-01-15T10:45:00Z",
+    "m_duration": 2700,
+    "m_status": "completed",
+    "m_participants": ["john@example.com", "jane@acme.com"],
+    "m_url": "https://meet.google.com/abc-xyz",
+    "transcription": {
+      "t_transcript": "[00:00] John: Hello...\n[00:05] Jane: Hi...",
+      "t_summary": "Discussed Q4 sales targets..."
+    },
+    "summary": {
+      "s_agenda": ["Q4 targets", "Pricing"],
+      "s_topics": ["Budget", "Timeline"],
+      "s_action_items": ["Send proposal by Friday"]
+    },
+    "scores": {
+      "total_score": 75.5,
+      "categories": [...]
+    },
+    "red_flags": [
+      {
+        "drf_id": "...",
+        "rf_title": "Pricing Concern",
+        "drf_reason": "Customer expressed concern about pricing",
+        "drf_severity": "High",
+        "drf_status": "active"
+      }
+    ],
+    "video": {
+      "v_url": "https://s3.amazonaws.com/...",
+      "v_format": "mp4"
+    },
+    "permissions": {
+      "can_view": true,
+      "can_edit": true,
+      "can_delete": false
+    }
+  }
+}
+```
+
+---
+
+### POST /meetings/meeting/share
+
+Generate a shareable link for a meeting.
+
+**Request:**
+```json
+POST /api/v1/meetings/meeting/share
+Authorization: Bearer {token}
+
+{
+  "m_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Meeting shared successfully",
+  "share_id": "share-abc-123",
+  "shareable_url": "https://app.gistly.ai/meetings/shared?m_id=xxx&access_token=yyy",
+  "expires_at": "2024-02-15T10:00:00Z"
+}
+```
+
+**Security:**
+- Access tokens are cryptographically secure
+- Links expire after configured duration
+- View access only (no editing)
+
+---
+
+### GET /meetings/shared
+
+Access a shared meeting.
+
+**Request:**
+```http
+GET /api/v1/meetings/shared?m_id={meeting_id}&access_token={token}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Shared meeting",
+  "meeting": {
+    "m_id": "...",
+    "m_name": "Shared Meeting",
+    "transcription": {...},
+    "summary": {...}
+    // Note: Video URL may be excluded for public shares
+  }
+}
+```
+
+**Error Responses:**
+- `400` - Invalid or expired token
+- `404` - Meeting not found
+- `403` - Access denied
+
+---
+
+### POST /meetings/meeting/speaker-mapping
+
+Get speaker mapping (agent vs customer).
+
+**Request:**
+```json
+POST /api/v1/meetings/meeting/speaker-mapping
+Authorization: Bearer {token}
+
+{
+  "m_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Speaker mapping",
+  "speakers": {
+    "agent": "SPEAKER_00",
+    "customer": "SPEAKER_01"
+  },
+  "talk_ratio": {
+    "agent": 0.65,
+    "customer": 0.35
+  }
+}
+```
+
+---
+
+### DELETE /meetings/meeting/delete
+
+Delete a meeting.
+
+**Request:**
+```json
+DELETE /api/v1/meetings/meeting/delete
+Authorization: Bearer {token}
+
+{
+  "m_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Meeting deleted successfully"
+}
+```
+
+**Permission Required:** `delete_meetings`
+
+---
+
+## Integration Examples
+
+### Python
+
+```python
+import requests
+
+# List meetings
+headers = {"Authorization": f"Bearer {token}"}
+params = {
+    "from_date": "2024-01-01",
+    "page": 1,
+    "page_size": 20
+}
+response = requests.get(
+    "https://api.gistly.ai/api/v1/meetings/all",
+    headers=headers,
+    params=params
+)
+meetings = response.json()
+
+# Upload meeting
+files = {"file": open("recording.mp3", "rb")}
+data = {
+    "m_name": "Client Meeting",
+    "m_start_time": "2024-01-15T10:00:00Z",
+    "m_end_time": "2024-01-15T10:45:00Z"
+}
+response = requests.post(
+    "https://api.gistly.ai/api/v1/meetings/upload-meeting",
+    headers=headers,
+    files=files,
+    data=data
+)
+```
+
+### JavaScript
+
+```javascript
+// List meetings
+const response = await fetch('https://api.gistly.ai/api/v1/meetings/all?' + new URLSearchParams({
+  from_date: '2024-01-01',
+  page: '1',
+  page_size: '20'
+}), {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+const meetings = await response.json();
+
+// Upload meeting
+const formData = new FormData();
+formData.append('file', recordingFile);
+formData.append('m_name', 'Client Meeting');
+formData.append('m_start_time', '2024-01-15T10:00:00Z');
+formData.append('m_end_time', '2024-01-15T10:45:00Z');
+
+const uploadResponse = await fetch('https://api.gistly.ai/api/v1/meetings/upload-meeting', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`
+  },
+  body: formData
+});
+```
+
+---
+
+## Next Steps
+
+- Learn about [Reports API](/api-reference/reports)
+- Review [Error Handling](/api-reference/error-handling)
+- Explore [Backend Services](/backend/services)

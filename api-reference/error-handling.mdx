@@ -1,0 +1,627 @@
+---
+title: "Error Handling"
+description: "API error handling, status codes, and troubleshooting"
+icon: "alert-triangle"
+---
+
+# Error Handling
+
+Complete guide to API errors, status codes, and handling patterns.
+
+## Error Response Format
+
+All API errors follow a consistent format:
+
+```json
+{
+  "message": "User-friendly error description",
+  "error": "Detailed technical error message",
+  "details": ["Additional error details"]
+}
+```
+
+### Example Error Response
+
+```json
+{
+  "message": "Validation failed",
+  "error": "Email is required and must be valid",
+  "details": [
+    "u_email: Field is required",
+    "u_password: Password too weak"
+  ]
+}
+```
+
+---
+
+## HTTP Status Codes
+
+### 1xx Informational
+
+| Code | Name | Description |
+|------|------|-------------|
+| 100 | Continue | Server received initial request |
+
+### 2xx Success
+
+| Code | Name | Description |
+|------|------|-------------|
+| 200 | OK | Request succeeded |
+| 201 | Created | Resource created successfully |
+| 204 | No Content | Request succeeded with no return data |
+
+**Success Response Example:**
+```json
+{
+  "message": "Meeting created successfully",
+  "m_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### 3xx Redirection
+
+| Code | Name | Description |
+|------|------|-------------|
+| 304 | Not Modified | Resource hasn't changed (caching) |
+
+### 4xx Client Errors
+
+| Code | Name | Description |
+|------|------|-------------|
+| 400 | Bad Request | Invalid request data |
+| 401 | Unauthorized | Missing or invalid authentication |
+| 403 | Forbidden | Insufficient permissions |
+| 404 | Not Found | Resource doesn't exist |
+| 409 | Conflict | Resource conflict (duplicate) |
+| 422 | Unprocessable Entity | Malformed request |
+| 429 | Too Many Requests | Rate limit exceeded |
+
+**400 Bad Request Example:**
+```json
+{
+  "message": "Invalid request data",
+  "error": "m_name field is required",
+  "details": ["Required field: m_name"]
+}
+```
+
+**401 Unauthorized Example:**
+```json
+{
+  "message": "Authentication required",
+  "error": "Invalid or expired JWT token"
+}
+```
+
+**403 Forbidden Example:**
+```json
+{
+  "message": "You don't have permission to access this resource",
+  "error": "User lacks 'delete_meetings' permission"
+}
+```
+
+**404 Not Found Example:**
+```json
+{
+  "message": "Resource not found",
+  "error": "Meeting with ID 'xxx' does not exist"
+}
+```
+
+**429 Rate Limited Example:**
+```json
+{
+  "message": "Too many requests",
+  "error": "Rate limit exceeded. Try again in 60 seconds.",
+  "retry_after": 60
+}
+```
+
+### 5xx Server Errors
+
+| Code | Name | Description |
+|------|------|-------------|
+| 500 | Internal Server Error | Server error |
+| 502 | Bad Gateway | Invalid upstream response |
+| 503 | Service Unavailable | Server temporarily unavailable |
+
+**500 Error Example:**
+```json
+{
+  "message": "An error occurred while processing your request",
+  "error": "Database connection failed"
+}
+```
+
+---
+
+## Common Error Scenarios
+
+### Authentication Errors
+
+#### Missing Token
+```bash
+curl -X GET https://api.gistly.ai/api/v1/meetings/all
+```
+
+**Response (401):**
+```json
+{
+  "message": "Authentication required",
+  "error": "Missing Authorization header"
+}
+```
+
+**Solution:** Include valid JWT token:
+```bash
+curl -X GET https://api.gistly.ai/api/v1/meetings/all \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+#### Invalid Token
+```bash
+curl -X GET https://api.gistly.ai/api/v1/meetings/all \
+  -H "Authorization: Bearer invalid-token"
+```
+
+**Response (401):**
+```json
+{
+  "message": "Authentication failed",
+  "error": "Invalid JWT token"
+}
+```
+
+**Solution:** Re-authenticate to get a new token.
+
+#### Expired Token
+```json
+{
+  "message": "Token has expired",
+  "error": "JWT token expired on 2024-01-01T12:00:00Z"
+}
+```
+
+**Solution:** User must log in again.
+
+---
+
+### Authorization Errors
+
+#### Insufficient Permissions
+```bash
+curl -X DELETE https://api.gistly.ai/api/v1/meetings/123 \
+  -H "Authorization: Bearer valid-user-token"
+```
+
+**Response (403):**
+```json
+{
+  "message": "Permission denied",
+  "error": "User lacks 'delete_meetings' permission"
+}
+```
+
+**Solution:** User needs elevated permissions. Contact administrator.
+
+#### Organization Access Denied
+```json
+{
+  "message": "Organization access denied",
+  "error": "User is not a member of this organization"
+}
+```
+
+**Solution:** Ensure user is member of the organization or switch workspace.
+
+---
+
+### Validation Errors
+
+#### Missing Required Fields
+```bash
+curl -X POST https://api.gistly.ai/api/v1/meetings/upload-meeting \
+  -H "Authorization: Bearer token" \
+  -H "Content-Type: application/json" \
+  -d '{"m_name": "Meeting"}'
+```
+
+**Response (400):**
+```json
+{
+  "message": "Validation failed",
+  "details": [
+    "m_start_time: Required field",
+    "m_end_time: Required field",
+    "m_participants: Required field"
+  ]
+}
+```
+
+**Solution:** Include all required fields.
+
+#### Invalid Data Type
+```json
+{
+  "message": "Invalid data type",
+  "details": [
+    "m_duration: Must be a number, received string"
+  ]
+}
+```
+
+**Solution:** Ensure correct data types.
+
+---
+
+### Not Found Errors
+
+#### Invalid Resource ID
+```bash
+curl -X GET https://api.gistly.ai/api/v1/meetings/meeting/get?m_id=invalid-id
+```
+
+**Response (404):**
+```json
+{
+  "message": "Meeting not found",
+  "error": "No meeting found with ID 'invalid-id'"
+}
+```
+
+**Solution:** Verify the resource ID is correct.
+
+#### Invalid Endpoint
+```bash
+curl -X GET https://api.gistly.ai/api/v1/invalid-endpoint
+```
+
+**Response (404):**
+```json
+{
+  "message": "Endpoint not found",
+  "error": "The requested URL was not found on this server"
+}
+```
+
+**Solution:** Check API documentation for correct endpoints.
+
+---
+
+### Server Errors
+
+#### Database Connection Failed
+```json
+{
+  "message": "Service temporarily unavailable",
+  "error": "Database connection failed"
+}
+```
+
+**Solution:** Try again later. If persistent, contact support.
+
+#### External Service Error
+```json
+{
+  "message": "Transcription service unavailable",
+  "error": "Failed to connect to transcription provider"
+}
+```
+
+**Solution:** The service may be temporarily down. Retry later.
+
+---
+
+## Frontend Error Handling
+
+### Automatic Error Handling
+
+The frontend API client automatically handles common errors:
+
+```typescript
+// src/services/api/api-utils.ts
+
+// 401: Automatic redirect to sign-in
+if (response.status === 401) {
+  removeItemFromLocalStorage("user");
+  window.location.href = "/sign-in";
+}
+
+// 403: Return error for display
+if (response.status === 403) {
+  return {
+    ...data,
+    message: "You don't have permission to access this resource"
+  };
+}
+```
+
+### Manual Error Handling
+
+```typescript
+import { parseApiError } from "@/services/api/api-utils";
+import toast from "react-hot-toast";
+
+try {
+  const result = await postAPI("/meetings/upload", formData);
+  toast.success("Meeting uploaded successfully");
+} catch (error) {
+  const { message, code, details } = parseApiError(error);
+
+  // Display user-friendly message
+  toast.error(message);
+
+  // Log for debugging
+  console.error("API Error:", { code, details });
+
+  // Handle specific errors
+  if (code === 401) {
+    // Redirect to login (automatic)
+  } else if (code === 403) {
+    // Show permission error
+    toast.error("You don't have permission for this action");
+  } else if (code === 429) {
+    // Show rate limit message
+    toast.error("Too many requests. Please wait.");
+  }
+}
+```
+
+### Error Parsing Utility
+
+```typescript
+// src/services/api/api-utils.ts
+export const parseApiError = (
+  error: any
+): {
+  message: string;
+  code?: number;
+  details?: string[] | Record<string, string>;
+} => {
+  const data = error?.data ?? error;
+  const status = error?.status ?? error?.code;
+  const details = data?.details ?? data?.error?.details;
+
+  let message = data?.error ?? data?.message ?? "Request failed";
+
+  // Append details if array
+  if (Array.isArray(details) && details.length > 0) {
+    message = `${message}: ${details.join(", ")}`;
+  }
+
+  return { message, code: status, details };
+};
+```
+
+---
+
+## Backend Error Handling
+
+### Route-Level Error Handling
+
+```python
+# app/routes/meeting_routes.py
+
+@meeting_routes.route("/meetings/upload-meeting", methods=["POST"])
+@jwt_required()
+def upload_meeting():
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        if not data or "m_name" not in data:
+            return jsonify({
+                "message": "Validation failed",
+                "details": ["m_name: Required field"]
+            }), 400
+
+        # Process meeting
+        result, status = add_meetings(data)
+
+        return jsonify(result), status
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error uploading meeting: {str(e)}")
+        return jsonify({
+            "message": "An error occurred",
+            "error": str(e)
+        }), 500
+```
+
+### Service-Level Error Handling
+
+```python
+# app/services/meeting_services.py
+
+def add_meetings(data: dict) -> tuple:
+    try:
+        # Business logic
+        meeting = Meeting(**data)
+        db.session.add(meeting)
+        db.session.commit()
+
+        return {
+            "message": "Meeting created",
+            "m_id": str(meeting.m_id)
+        }, 201
+
+    except IntegrityError as e:
+        db.session.rollback()
+        return {
+            "message": "Meeting already exists",
+            "error": str(e)
+        }, 409
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating meeting: {str(e)}")
+        return {
+            "message": "Failed to create meeting"
+        }, 500
+```
+
+### Custom Error Handlers
+
+```python
+# app/__init__.py
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        "message": "Resource not found",
+        "error": str(error)
+    }), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return jsonify({
+        "message": "Internal server error"
+    }), 500
+```
+
+---
+
+## Rate Limiting
+
+### Rate Limit Headers
+
+When rate limited, responses include:
+
+```http
+HTTP/1.1 429 Too Many Requests
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1704110400
+Retry-After: 60
+```
+
+### Handling Rate Limits
+
+```typescript
+async function makeRequest() {
+  try {
+    return await apiCall();
+  } catch (error) {
+    if (error.status === 429) {
+      const retryAfter = error.headers.get('Retry-After');
+      const waitTime = parseInt(retryAfter) * 1000;
+
+      toast.error(`Rate limited. Retrying in ${retryAfter} seconds...`);
+
+      // Retry after delay
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      return makeRequest(); // Retry
+    }
+    throw error;
+  }
+}
+```
+
+---
+
+## CORS Errors
+
+### Detecting CORS Errors
+
+```typescript
+const isCorsError = error instanceof TypeError && (
+  error.message.includes("Failed to fetch") ||
+  error.message.includes("NetworkError") ||
+  error.message.includes("Network request failed")
+);
+
+if (isCorsError) {
+  console.error("CORS Error: Check API CORS configuration");
+  toast.error("Network error. Please check your connection.");
+}
+```
+
+### Common CORS Issues
+
+1. **Origin not allowed**
+   - Error: "CORS policy: No 'Access-Control-Allow-Origin' header"
+   - Solution: Add origin to backend CORS config
+
+2. **Credentials not allowed**
+   - Error: "CORS credential support is not enabled"
+   - Solution: Set `supports_credentials=True` in CORS config
+
+---
+
+## Error Monitoring
+
+### Sentry Integration
+
+Errors are automatically tracked in Sentry:
+
+```python
+# sentry_sdk.init(...) is configured
+
+# Errors are captured automatically
+try:
+    risky_operation()
+except Exception as e:
+    # Sentry captures this automatically
+    raise
+```
+
+### Frontend Error Tracking
+
+```typescript
+import * as Sentry from "@sentry/nextjs";
+
+try {
+  await apiCall();
+} catch (error) {
+  // Send to Sentry
+  Sentry.captureException(error);
+
+  // Display to user
+  toast.error("An error occurred. Our team has been notified.");
+}
+```
+
+---
+
+## Troubleshooting
+
+### Checklist
+
+When encountering API errors:
+
+- [ ] Check authentication token is valid
+- [ ] Verify request format (JSON, FormData)
+- [ ] Confirm required fields are included
+- [ ] Check data types match expected format
+- [ ] Verify user has required permissions
+- [ ] Check rate limits if making many requests
+- [ ] Review error message and details
+- [ ] Check server status (500 errors)
+- [ ] Verify network connectivity
+- [ ] Check CORS configuration
+
+### Debug Mode
+
+Enable debug logging:
+
+```typescript
+// frontend
+localStorage.setItem('debug', 'true');
+```
+
+```python
+# backend
+FLASK_ENV=development
+```
+
+---
+
+## Next Steps
+
+- Learn about [Authentication](/api-reference/authentication)
+- Explore [Meetings API](/api-reference/meetings)
+- Review [API Client](/frontend/api-integration)

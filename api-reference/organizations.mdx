@@ -1,0 +1,122 @@
+---
+title: "Organizations API"
+description: "Organization and workspace management API endpoints"
+icon: "building"
+openapi: "GET /organisations"
+---
+
+# Organizations API
+
+Organization and workspace management API endpoints.
+
+## Overview
+
+The organizations API handles:
+- Organization CRUD operations
+- Workspace selection
+- Domain-based auto-join
+- Join requests
+
+---
+
+## Endpoints
+
+### GET /organisations
+
+Get user's organizations.
+
+**Request:**
+```http
+GET /api/v1/organisations
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "organisations": [
+    {
+      "org_id": "org-uuid",
+      "org_name": "Acme Corp",
+      "org_domain": "acme.com",
+      "org_slug": "acme-corp",
+      "user_role": "admin"
+    }
+  ]
+}
+```
+
+### POST /organisations
+
+Create a new organization.
+
+**Request:**
+```json
+POST /api/v1/organisations
+
+{
+  "org_name": "New Company",
+  "org_domain": "newcompany.com",
+  "org_slug": "new-company"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "org_id": "new-org-uuid",
+  "message": "Organisation created successfully"
+}
+```
+
+### POST /organisations/workspace/select
+
+Select active workspace.
+
+**Request:**
+```json
+POST /api/v1/organisations/workspace/select
+
+{
+  "org_id": "org-uuid"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Workspace selected",
+  "access_token": "new-jwt-token",
+  "org_id": "org-uuid",
+  "role": "admin",
+  "permissions": {...}
+}
+```
+
+### GET /organisations/domain/workspaces
+
+Get organizations by email domain.
+
+**Request:**
+```http
+GET /api/v1/organisations/domain/workspaces?domain=acme.com
+```
+
+**Response:**
+```json
+{
+  "organisations": [
+    {
+      "org_id": "org-uuid",
+      "org_name": "Acme Corp"
+    }
+  ]
+}
+```
+
+---
+
+## Next Steps
+
+- Learn about [Users API](/api-reference/users)
+- Explore [Authentication](/api-reference/authentication)

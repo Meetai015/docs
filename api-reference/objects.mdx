@@ -1,0 +1,640 @@
+---
+title: "Object System API"
+description: "Dynamic object and record management API"
+icon: "database"
+openapi: "GET /objects"
+---
+
+# Object System API
+
+The Object System API provides a flexible, dynamic schema for managing custom data beyond core meeting entities.
+
+## Overview
+
+The object system supports:
+- Custom object definitions (Tickets, Leads, Tasks, etc.)
+- Dynamic attributes with rich configuration
+- Record CRUD operations
+- Relationship management
+- Custom views (table, kanban)
+- Lists and filters
+- CSV export
+
+---
+
+## Object Management
+
+### GET /objects
+
+List all objects for the current organization.
+
+**Request:**
+```http
+GET /api/v1/objects
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "objects": [
+    {
+      "o_id": "obj-uuid",
+      "o_key": "tickets",
+      "o_name": "Tickets",
+      "o_display_name": "Support Tickets",
+      "o_type": "standard",
+      "o_description": "Customer support tickets",
+      "attribute_count": 15,
+      "record_count": 150,
+      "is_active": true
+    },
+    {
+      "o_id": "obj-uuid-2",
+      "o_key": "leads",
+      "o_name": "Leads",
+      "o_display_name": "Sales Leads",
+      "o_type": "standard",
+      "attribute_count": 12,
+      "record_count": 75,
+      "is_active": true
+    }
+  ]
+}
+```
+
+### POST /objects
+
+Create a custom object.
+
+**Request:**
+```json
+POST /api/v1/objects
+Authorization: Bearer {token}
+
+{
+  "o_key": "customers",
+  "o_name": "Customers",
+  "o_display_name": "Customer Accounts",
+  "o_description": "B2B customer accounts",
+  "o_icon": "building"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "o_id": "new-obj-uuid",
+  "o_key": "customers",
+  "message": "Object created successfully"
+}
+```
+
+---
+
+## Attributes
+
+### GET /objects/{o_key}/attributes
+
+List all attributes for an object.
+
+**Request:**
+```http
+GET /api/v1/objects/tickets/attributes
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "attributes": [
+    {
+      "a_id": "attr-uuid",
+      "a_key": "subject",
+      "a_display_name": "Subject",
+      "a_data_type": "text",
+      "a_is_required": true,
+      "a_is_unique": false,
+      "a_description": "Ticket subject line"
+    },
+    {
+      "a_id": "attr-uuid-2",
+      "a_key": "priority",
+      "a_display_name": "Priority",
+      "a_data_type": "select",
+      "a_options": ["Low", "Medium", "High", "Urgent"],
+      "a_default_value": "Medium"
+    },
+    {
+      "a_id": "attr-uuid-3",
+      "a_key": "status",
+      "a_display_name": "Status",
+      "a_data_type": "select",
+      "a_options": ["Open", "In Progress", "Resolved", "Closed"],
+      "a_default_value": "Open"
+    }
+  ]
+}
+```
+
+**Data Types:**
+- `text` - Single-line text
+- `textarea` - Multi-line text
+- `number` - Numeric value
+- `select` - Dropdown selection
+- `multiselect` - Multiple selections
+- `date` - Date picker
+- `datetime` - Date and time picker
+- `boolean` - True/False checkbox
+- `email` - Email address
+- `phone` - Phone number
+- `url` - URL/link
+- `currency` - Monetary value
+- `attachment` - File upload
+- `relationship` - Link to another object
+
+### POST /objects/{o_id}/attributes
+
+Create a new attribute for an object.
+
+**Request:**
+```json
+POST /api/v1/objects/{o_id}/attributes
+
+{
+  "a_key": "customer_name",
+  "a_display_name": "Customer Name",
+  "a_data_type": "text",
+  "a_is_required": true,
+  "a_description": "Name of the customer"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "a_id": "new-attr-uuid",
+  "message": "Attribute created successfully"
+}
+```
+
+### PATCH /objects/{o_id}/attributes/{attr_id}
+
+Update an attribute.
+
+**Request:**
+```json
+PATCH /api/v1/objects/{o_id}/attributes/{attr_id}
+
+{
+  "a_display_name": "Customer Full Name",
+  "a_is_required": false
+}
+```
+
+### DELETE /objects/{o_id}/attributes/{attr_id}
+
+Delete an attribute.
+
+**Response (200 OK):**
+```json
+{
+  "message": "Attribute deleted successfully"
+}
+```
+
+---
+
+## Records
+
+### GET /objects/{o_key}/records
+
+List records with filtering, sorting, and pagination.
+
+**Request:**
+```http
+GET /api/v1/objects/tickets/records?page=1&page_size=20&sort_by=created_at&sort_order=desc
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: 1) |
+| `page_size` | integer | Items per page (default: 20) |
+| `sort_by` | string | Field to sort by |
+| `sort_order` | string | `asc` or `desc` |
+| `search` | string | Search query |
+| `filters` | object | Attribute filters |
+| `view_id` | string | Use view configuration |
+
+**Response:**
+```json
+{
+  "records": [
+    {
+      "rec_id": "rec-uuid",
+      "rec_data": {
+        "subject": "Login issue",
+        "priority": "High",
+        "status": "Open",
+        "description": "User cannot log in...",
+        "created_at": "2024-01-15T10:00:00Z"
+      },
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "created_by": {
+        "u_id": "user-uuid",
+        "u_email": "agent@example.com"
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "page_size": 20,
+    "total_count": 150,
+    "total_pages": 8
+  }
+}
+```
+
+### POST /objects/{o_key}/records
+
+Create a new record.
+
+**Request:**
+```json
+POST /api/v1/objects/tickets/records
+
+{
+  "subject": "New ticket",
+  "priority": "Medium",
+  "status": "Open",
+  "description": "Issue description..."
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "rec_id": "new-rec-uuid",
+  "message": "Record created successfully"
+}
+```
+
+### GET /objects/{o_key}/records/{rec_id}
+
+Get a single record.
+
+**Response (200 OK):**
+```json
+{
+  "rec_id": "rec-uuid",
+  "rec_data": {...},
+  "created_at": "2024-01-15T10:00:00Z",
+  "updated_at": "2024-01-15T10:00:00Z"
+}
+```
+
+### PATCH /objects/{o_key}/records/{rec_id}
+
+Update a record.
+
+**Request:**
+```json
+PATCH /api/v1/objects/tickets/records/{rec_id}
+
+{
+  "status": "Resolved",
+  "resolution": "Issue fixed by updating user settings"
+}
+```
+
+### DELETE /objects/{o_key}/records/{rec_id}
+
+Soft delete a record.
+
+**Response (200 OK):**
+```json
+{
+  "message": "Record deleted successfully"
+}
+```
+
+### POST /objects/{o_key}/records/bulk
+
+Bulk create records.
+
+**Request:**
+```json
+POST /api/v1/objects/tickets/records/bulk
+
+{
+  "records": [
+    {"subject": "Ticket 1", "priority": "High"},
+    {"subject": "Ticket 2", "priority": "Low"}
+  ]
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "created_count": 2,
+  "rec_ids": ["rec-uuid-1", "rec-uuid-2"]
+}
+```
+
+---
+
+## Export
+
+### GET /objects/{o_key}/records/export
+
+Export records to CSV.
+
+**Request:**
+```http
+GET /api/v1/objects/tickets/records/export?format=csv
+Authorization: Bearer {token}
+```
+
+**Response:**
+```
+HTTP/1.1 200 OK
+Content-Type: text/csv
+Content-Disposition: attachment; filename="tickets-2024-01-15.csv"
+
+subject,priority,status,created_at
+"Login issue","High","Open","2024-01-15T10:00:00Z"
+"Feature request","Low","Open","2024-01-14T15:30:00Z"
+```
+
+### POST /objects/{o_key}/records/export-email
+
+Email CSV export to user.
+
+**Request:**
+```json
+POST /api/v1/objects/tickets/records/export-email
+
+{
+  "filters": {
+    "status": "Open"
+  },
+  "email_address": "user@example.com"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Export will be emailed to user@example.com"
+}
+```
+
+---
+
+## Views
+
+### POST /views
+
+Create a custom view (table or kanban).
+
+**Request:**
+```json
+POST /api/v1/views
+
+{
+  "v_name": "High Priority Tickets",
+  "v_object_id": "obj-uuid",
+  "v_type": "table",
+  "v_config": {
+    "columns": ["subject", "priority", "status", "created_at"],
+    "filters": {
+      "priority": ["High", "Urgent"]
+    },
+    "sort_by": "created_at",
+    "sort_order": "desc"
+  }
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "v_id": "view-uuid",
+  "message": "View created successfully"
+}
+```
+
+### GET /objects/{o_key}/views
+
+List views for an object.
+
+**Response:**
+```json
+{
+  "views": [
+    {
+      "v_id": "view-uuid",
+      "v_name": "All Tickets",
+      "v_type": "table",
+      "is_default": true
+    },
+    {
+      "v_id": "view-uuid-2",
+      "v_name": "High Priority",
+      "v_type": "table",
+      "is_default": false
+    }
+  ]
+}
+```
+
+---
+
+## Lists
+
+### GET /lists
+
+List all lists.
+
+**Response:**
+```json
+{
+  "lists": [
+    {
+      "list_id": "list-uuid",
+      "list_name": "My Open Tickets",
+      "list_type": "static",
+      "object_key": "tickets",
+      "entry_count": 5
+    }
+  ]
+}
+```
+
+### POST /lists
+
+Create a new list.
+
+**Request:**
+```json
+POST /api/v1/lists
+
+{
+  "list_name": "Priority Customers",
+  "list_type": "static",
+  "object_key": "customers",
+  "list_entries": ["rec-uuid-1", "rec-uuid-2"]
+}
+```
+
+**List Types:**
+- `static` - Manually selected records
+- `dynamic` - Filter-based (auto-updated)
+- `kanban` - Kanban board configuration
+
+---
+
+## Relationships
+
+### POST /relationships
+
+Create a relationship between objects.
+
+**Request:**
+```json
+POST /api/v1/relationships
+
+{
+  "r_source_object_id": "obj-uuid-1",
+  "r_target_object_id": "obj-uuid-2",
+  "r_relationship_name": "has_tickets",
+  "r_inverse_name": "belongs_to"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "r_id": "rel-uuid",
+  "message": "Relationship created successfully"
+}
+```
+
+### GET /records/{rec_id}/relationships
+
+Get all relationships for a record.
+
+**Response:**
+```json
+{
+  "relationships": [
+    {
+      "r_id": "rel-uuid",
+      "related_record": {
+        "rec_id": "related-rec-uuid",
+        "rec_data": {...}
+      },
+      "relationship_name": "has_tickets"
+    }
+  ]
+}
+```
+
+---
+
+## Lead Processor
+
+### POST /lead-processor/submit
+
+Submit RAG extraction job for lead data.
+
+**Request:**
+```json
+POST /api/v1/lead-processor/submit
+
+{
+  "records": [
+    {
+      "rec_id": "rec-uuid-1",
+      "text": "Meeting transcript with customer...",
+      "context": "Sales call for Q4 contract"
+    }
+  ],
+  "extraction_config": {
+    "extract_budget": true,
+    "extract_timeline": true,
+    "extract_decision_makers": true
+  }
+}
+```
+
+**Response (202 Accepted):**
+```json
+{
+  "job_id": "job-uuid",
+  "message": "Lead processing started",
+  "estimated_time": "2-5 minutes"
+}
+```
+
+---
+
+## Integration Examples
+
+### Python
+
+```python
+import requests
+
+headers = {"Authorization": f"Bearer {token}"}
+
+# Create record
+record = {
+    "subject": "Support ticket",
+    "priority": "High",
+    "status": "Open"
+}
+
+response = requests.post(
+    "https://api.gistly.ai/api/v1/objects/tickets/records",
+    headers=headers,
+    json=record
+)
+
+result = response.json()
+print(f"Created record: {result['rec_id']}")
+```
+
+### JavaScript
+
+```javascript
+// Create ticket
+const ticket = await fetch('https://api.gistly.ai/api/v1/objects/tickets/records', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    subject: 'Login issue',
+    priority: 'High',
+    status: 'Open'
+  })
+});
+
+const result = await ticket.json();
+console.log(`Created: ${result.rec_id}`);
+```
+
+---
+
+## Next Steps
+
+- Learn about [Webhooks API](/api-reference/webhooks)
+- Explore [Backend Services](/backend/services)
+- Review [Data Models](/backend/models)

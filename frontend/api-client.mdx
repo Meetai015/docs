@@ -1,0 +1,733 @@
+---
+title: "API Client"
+description: "Frontend API client implementation and usage"
+icon: "code"
+---
+
+# API Client
+
+The frontend API client provides a centralized way to make HTTP requests to the Gistly backend with built-in error handling, authentication, and type safety.
+
+## Overview
+
+The API client is located at `src/services/api/` and consists of:
+
+- **Core utilities** - `api-utils.ts` (TypeScript) and `api.utils.js` (JavaScript)
+- **Endpoint modules** - Organized by feature (auth, meetings, reports, etc.)
+- **Type definitions** - TypeScript interfaces for request/response data
+
+---
+
+## Core API Utilities
+
+### Base Configuration
+
+```typescript
+// src/services/api/api-utils.ts
+
+const getApiBaseUrl = (): string => {
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+};
+```
+
+### Token Management
+
+```typescript
+// Save token to localStorage
+export const saveItemToLocalStorage = (
+  key: string,
+  value: unknown
+): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+};
+
+// Get token from localStorage
+export const getItemFromLocalStorage = <T>(
+  key: string
+): T | null => {
+  if (typeof window !== 'undefined') {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : null;
+  }
+  return null;
+};
+
+// Get JWT token
+export const getTokenFromLocalStorage = (): string | undefined => {
+  const user = getItemFromLocalStorage<User>('user');
+  return user?.access_token;
+};
+```
+
+### HTTP Methods
+
+#### GET Request
+
+```typescript
+export const getAPI = async (
+  endpoint: string,
+  args: Record<string, string> = {},
+  token?: string
+): Promise<any> => {
+  const TOKEN = token || getTokenFromLocalStorage();
+  const url = new URL(`${getApiBaseUrl()}${endpoint}`);
+
+  // Add query parameters
+  Object.keys(args).forEach((key) =>
+    url.searchParams.append(key, args[key])
+  );
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(TOKEN && { Authorization: `Bearer ${TOKEN}` }),
+    },
+  });
+
+  return handleResponse(response, await response.json(), 'success');
+};
+```
+
+#### POST Request
+
+```typescript
+export const postAPI = async (
+  endpoint: string,
+  data: any,
+  formData = false,
+  token?: string
+): Promise<any> => {
+  const TOKEN = token || getTokenFromLocalStorage();
+  const url = `${getApiBaseUrl()}${endpoint}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...(formData ? {} : { 'Content-Type': 'application/json' }),
+      ...(TOKEN && { Authorization: `Bearer ${TOKEN}` }),
+    },
+    body: formData ? data : JSON.stringify(data),
+  });
+
+  return handleResponse(response, await response.json(), 'success');
+};
+```
+
+#### PUT Request
+
+```typescript
+export const putAPI = async (
+  endpoint: string,
+  data: any,
+  token?: string
+): Promise<any> => {
+  const TOKEN = token || getTokenFromLocalStorage();
+  const url = `${getApiBaseUrl()}${endpoint}`;
+
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(TOKEN && { Authorization: `Bearer ${TOKEN}` }),
+    },
+    body: JSON.stringify(data),
+  });
+
+  return handleResponse(response, await response.json(), 'success');
+};
+```
+
+#### PATCH Request
+
+```typescript
+export const patchAPI = async (
+  endpoint: string,
+  data: any
+): Promise<any> => {
+  const TOKEN = getTokenFromLocalStorage();
+  const url = `${getApiBaseUrl()}${endpoint}`;
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(TOKEN && { Authorization: `Bearer ${TOKEN}` }),
+    },
+    body: JSON.stringify(data),
+  });
+
+  return handleResponse(response, await response.json(), 'success');
+};
+```
+
+#### DELETE Request
+
+```typescript
+export const deleteAPI = async (
+  endpoint: string,
+  id: string,
+  token?: string
+): Promise<any> => {
+  const TOKEN = token || getTokenFromLocalStorage();
+  const url = `${getApiBaseUrl()}${endpoint}/${id}`;
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(TOKEN && { Authorization: `Bearer ${TOKEN}` }),
+    },
+  });
+
+  return handleResponse(
+    response,
+    await response.json(),
+    'success'
+  );
+};
+```
+
+---
+
+## Response Handler
+
+The response handler automatically processes responses and handles errors:
+
+```typescript
+const handleResponse = (
+  response: Response,
+  data: any,
+  type: 'success' | 'error'
+): any => {
+  return {
+    data,
+    status: response.status,
+    headers: response.headers,
+    statusText: response.statusText,
+    message:
+      data?.message ||
+      (type === 'success'
+        ? 'API request successful'
+        : 'API request failed'),
+  };
+};
+```
+
+### Automatic 401 Handling
+
+```typescript
+// Check for 401 Unauthorized
+if (response.status === 401 && TOKEN) {
+  console.warn('Unauthorized access. Redirecting to sign-in...');
+  removeItemFromLocalStorage('user');
+  window.location.href = '/sign-in';
+  return Promise.reject('Unauthorized access. Redirected to sign-in.');
+}
+```
+
+### 403 Permission Handling
+
+```typescript
+// Check for 403 Forbidden
+if (response.status === 403) {
+  console.error('Permission denied:', data.message || 'Access forbidden');
+  return {
+    ...data,
+    status: 403,
+    message: data.message || "You don't have permission to access this resource",
+  };
+}
+```
+
+---
+
+## Error Parsing
+
+Parse API errors into a consistent format:
+
+```typescript
+export const parseApiError = (
+  error: any
+): {
+  message: string;
+  code?: number;
+  details?: string[] | Record<string, string>;
+} => {
+  const data = error?.data ?? error;
+  const status = error?.status ?? error?.code;
+  const details = data?.details ?? data?.error?.details;
+
+  let message = data?.error ?? data?.message ?? error?.message ?? 'Request failed';
+
+  // Append details if array
+  if (Array.isArray(details) && details.length > 0) {
+    message = `${message}: ${details.join(', ')}`;
+  }
+
+  return { message, code: status, details };
+};
+```
+
+### CORS Error Detection
+
+```typescript
+const isCorsError = error instanceof TypeError &&
+  (error.message.includes('Failed to fetch') ||
+   error.message.includes('NetworkError') ||
+   error.message.includes('Network request failed'));
+
+if (isCorsError) {
+  return {
+    message: 'Network error. Please check your connection.',
+    code: 0,
+    details: 'CORS or network issue detected'
+  };
+}
+```
+
+---
+
+## API Endpoint Modules
+
+### Authentication Endpoints
+
+```typescript
+// src/services/api/auth/signin-api.ts
+
+export async function signInWithCredentials(
+  email: string,
+  password: string
+): Promise<User> {
+  const response = await postAPI('/auth/login', {
+    u_email: email,
+    u_password: password,
+    u_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
+
+  // Save user to localStorage
+  saveItemToLocalStorage('user', response);
+
+  return response;
+}
+```
+
+```typescript
+// src/services/api/auth/signup-api.ts
+
+export async function signUpWithCredentials(
+  email: string,
+  password: string,
+  firstName: string,
+  lastName: string
+): Promise<User> {
+  const response = await postAPI('/auth/signup', {
+    u_email: email,
+    u_password: password,
+    u_first_name: firstName,
+    u_last_name: lastName,
+    u_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
+
+  saveItemToLocalStorage('user', response);
+
+  return response;
+}
+```
+
+```typescript
+// src/services/api/auth/google-oauth.ts
+
+export async function googleOAuthSignUp(
+  idToken: string
+): Promise<User> {
+  const response = await postAPI('/auth/google', {
+    id_token: idToken,
+    u_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
+
+  saveItemToLocalStorage('user', response);
+
+  return response;
+}
+```
+
+---
+
+### Reports Endpoints
+
+```typescript
+// src/services/api/reports/run-report.ts
+
+export interface ReportRequest {
+  report_type: 'INSIGHT' | 'FUNNEL' | 'TIME_IN_STAGE' | 'STAGE_CHANGED';
+  datasource: {
+    kind: 'object';
+    object: string;
+  };
+  time_range: {
+    preset: 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'THIS_MONTH' | 'CUSTOM';
+    from?: string;
+    to?: string;
+  };
+  metric: string;
+  group_by?: string;
+  filters?: Record<string, any>;
+}
+
+export async function runReport(request: ReportRequest): Promise<ReportResponse> {
+  return postAPI('/api/v2/reports/run', request);
+}
+```
+
+```typescript
+// src/services/api/reports/saved-reports.ts
+
+export async function getSavedReports(): Promise<SavedReport[]> {
+  return getAPI('/api/v2/reports/saved');
+}
+
+export async function createSavedReport(
+  config: SavedReportConfig
+): Promise<SavedReport> {
+  return postAPI('/api/v2/reports/saved', config);
+}
+
+export async function updateSavedReport(
+  id: string,
+  config: Partial<SavedReportConfig>
+): Promise<SavedReport> {
+  return patchAPI(`/api/v2/reports/saved/${id}`, config);
+}
+
+export async function deleteSavedReport(id: string): Promise<void> {
+  return deleteAPI('/api/v2/reports/saved', id);
+}
+```
+
+---
+
+### Meetings Endpoints
+
+```typescript
+// src/services/api/meetings/get-meetings.ts
+
+export interface MeetingFilters {
+  from_date?: string;
+  to_date?: string;
+  page?: number;
+  page_size?: number;
+  search?: string;
+  min_duration?: number;
+  max_duration?: number;
+  sort_by?: 'date' | 'duration' | 'name';
+  sort_order?: 'asc' | 'desc';
+  agents?: string[];
+  red_flag_severities?: string[];
+  red_flag_only?: boolean;
+}
+
+export async function getMeetings(
+  filters: MeetingFilters = {}
+): Promise<MeetingsResponse> {
+  return getAPI('/meetings/all', filters as any);
+}
+```
+
+```typescript
+// src/services/api/meetings/upload-meeting.ts
+
+export async function uploadMeeting(
+  file: File,
+  metadata: {
+    m_name: string;
+    m_start_time: string;
+    m_end_time: string;
+    m_participants?: string;
+    m_description?: string;
+  }
+): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  Object.entries(metadata).forEach(([key, value]) => {
+    formData.append(key, value);
+  });
+
+  return postAPI('/meetings/upload-meeting', formData, true);
+}
+```
+
+---
+
+## Usage Examples
+
+### Basic GET Request
+
+```typescript
+import { getAPI } from '@/services/api/api-utils';
+
+// Fetch meetings
+const meetings = await getAPI('/meetings/all', {
+  page: '1',
+  page_size: '20'
+});
+
+console.log(meetings.data); // Meeting data
+console.log(meetings.message); // "Meetings fetched successfully."
+```
+
+### POST Request with Data
+
+```typescript
+import { postAPI } from '@/services/api/api-utils';
+
+// Create a new report
+const report = await postAPI('/api/v2/reports/run', {
+  report_type: 'INSIGHT',
+  datasource: { kind: 'object', object: 'meetings' },
+  time_range: { preset: 'LAST_30_DAYS' },
+  metric: 'total_calls'
+});
+
+console.log(report.data); // Report results
+```
+
+### File Upload
+
+```typescript
+import { postAPI } from '@/services/api/api-utils';
+
+// Upload meeting recording
+const formData = new FormData();
+formData.append('file', audioFile);
+formData.append('m_name', 'Client Meeting');
+formData.append('m_start_time', '2024-01-15T10:00:00Z');
+formData.append('m_end_time', '2024-01-15T10:45:00Z');
+
+const result = await postAPI('/meetings/upload-meeting', formData, true);
+console.log(result.data.m_id); // New meeting ID
+```
+
+### Error Handling
+
+```typescript
+import { postAPI, parseApiError } from '@/services/api/api-utils';
+import toast from 'react-hot-toast';
+
+try {
+  const result = await postAPI('/meetings/upload-meeting', data);
+  toast.success('Meeting uploaded successfully');
+} catch (error) {
+  const { message, code, details } = parseApiError(error);
+
+  // Display error to user
+  toast.error(message);
+
+  // Log for debugging
+  console.error('API Error:', { code, details });
+
+  // Handle specific errors
+  if (code === 401) {
+    // Redirect to login (automatic)
+  } else if (code === 403) {
+    toast.error("You don't have permission for this action");
+  } else if (code === 429) {
+    toast.error("Too many requests. Please wait.");
+  }
+}
+```
+
+---
+
+## Type Definitions
+
+```typescript
+// src/services/api/auth/type.d.ts
+
+export interface User {
+  u_id: string;
+  u_email: string;
+  u_first_name: string;
+  u_last_name: string;
+  u_theme?: 'light' | 'dark';
+  u_timezone?: string;
+  access_token: string;
+  organisations: Organisation[];
+  role?: string;
+  permissions?: Record<string, string[]>;
+}
+
+export interface Organisation {
+  org_id: string;
+  org_name: string;
+  org_domain: string;
+  org_slug: string;
+  user_role: string;
+}
+```
+
+```typescript
+// src/types/reporting.ts
+
+export interface ReportRequest {
+  report_type: ReportType;
+  datasource: DatasourceConfig;
+  time_range: TimeRangeConfig;
+  metric: string;
+  group_by?: string;
+  filters?: Record<string, any>;
+}
+
+export interface ReportResponse {
+  rows: ReportRow[];
+  totals?: ReportTotals;
+  query_stats?: ReportQueryStats;
+}
+
+export type ReportType =
+  | 'INSIGHT'
+  | 'FUNNEL'
+  | 'TIME_IN_STAGE'
+  | 'STAGE_CHANGED';
+
+export type AggregationType =
+  | 'COUNT'
+  | 'SUM'
+  | 'AVG'
+  | 'MIN'
+  | 'MAX';
+
+export type GraphType =
+  | 'LINE'
+  | 'BAR'
+  | 'PIE'
+  | 'FUNNEL'
+  | 'NUMBER'
+  | 'TABLE';
+```
+
+---
+
+## Authentication Flow
+
+### Login Flow
+
+```typescript
+// 1. Sign in
+const user = await signInWithCredentials(email, password);
+
+// 2. Token automatically saved to localStorage
+// localStorage.getItem('user') => { access_token: '...', ... }
+
+// 3. All subsequent requests include token automatically
+const meetings = await getAPI('/meetings/all');
+// Authorization header added automatically: `Bearer ${token}`
+```
+
+### Logout Flow
+
+```typescript
+import { removeItemFromLocalStorage } from '@/services/api/api-utils';
+
+export function logout() {
+  // Remove user from localStorage
+  removeItemFromLocalStorage('user');
+
+  // Redirect to login
+  window.location.href = '/sign-in';
+}
+```
+
+### Token Refresh
+
+Currently, tokens expire after 7 days. When a 401 is received, the user is automatically redirected to sign in.
+
+---
+
+## Best Practices
+
+### 1. Always Handle Errors
+
+```typescript
+try {
+  const result = await apiCall();
+} catch (error) {
+  const { message } = parseApiError(error);
+  toast.error(message);
+}
+```
+
+### 2. Use TypeScript Types
+
+```typescript
+import type { User, Meeting } from '@/types';
+
+const user: User = await signIn(...);
+const meetings: Meeting[] = await getMeetings(...);
+```
+
+### 3. Check Permissions
+
+```typescript
+import { useGlobalState } from '@/store';
+
+const { permissions } = useGlobalState();
+
+if (permissions?.meetings?.includes('delete')) {
+  // Show delete button
+}
+```
+
+### 4. Show Loading States
+
+```typescript
+const [loading, setLoading] = useState(false);
+
+const handleSubmit = async () => {
+  setLoading(true);
+  try {
+    await postAPI('/meetings/upload', data);
+    toast.success('Success!');
+  } catch (error) {
+    toast.error('Failed');
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+---
+
+## Testing
+
+### Mock API Calls
+
+```typescript
+// Mock for testing
+jest.mock('@/services/api/api-utils', () => ({
+  getAPI: jest.fn(() => Promise.resolve({ data: [] })),
+  postAPI: jest.fn(() => Promise.resolve({ data: { id: '123' } })),
+}));
+```
+
+### Integration Testing
+
+```typescript
+// Test actual API calls
+describe('API Client', () => {
+  it('should fetch meetings', async () => {
+    const meetings = await getAPI('/meetings/all');
+    expect(meetings.data).toBeDefined();
+  });
+});
+```
+
+---
+
+## Next Steps
+
+- Learn about [Authentication](/api-reference/authentication)
+- Review [Error Handling](/api-reference/error-handling)
+- Explore [State Management](/frontend/state-management)

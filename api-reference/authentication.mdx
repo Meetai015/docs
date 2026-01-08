@@ -1,0 +1,496 @@
+---
+title: "Authentication API"
+description: "Authentication and user management API endpoints"
+icon: "lock"
+openapi: "POST /auth"
+---
+
+# Authentication API
+
+Complete authentication API documentation for Gistly Call Analytics.
+
+## Overview
+
+The authentication system uses **JWT tokens** with support for:
+- Email/password authentication
+- Google OAuth 2.0
+- Email verification via OTP
+- Password reset flow
+- API key authentication for service-to-service calls
+
+<Steps>
+### Step 1: Sign Up or Login
+Users can sign up with email/password or use Google OAuth for quick authentication.
+
+### Step 2: Email Verification (Optional)
+If required by organization, verify email via OTP sent to registered email.
+
+### Step 3: Select Workspace
+If user belongs to multiple organizations, select active workspace.
+
+### Step 4: Access Granted
+Receive JWT access token and use it for subsequent API calls.
+</Steps>
+
+---
+
+## Endpoints
+
+### POST /auth/signup
+
+Create a new user account with email and password.
+
+**Request:**
+```json
+POST /auth/signup
+Content-Type: application/json
+
+{
+  "u_email": "john@example.com",
+  "u_password": "SecurePass123!",
+  "u_first_name": "John",
+  "u_last_name": "Doe",
+  "u_timezone": "America/New_York"
+}
+```
+
+**Password Requirements:**
+- Minimum 8 characters
+- At least 1 number
+- At least 1 uppercase letter
+- At least 1 lowercase letter
+- At least 1 special character
+
+**Response (201 Created):**
+```json
+{
+  "message": "User created successfully",
+  "u_id": "550e8400-e29b-41d4-a716-446655440000",
+  "u_email": "john@example.com",
+  "u_first_name": "John",
+  "u_last_name": "Doe",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "organisations": [
+    {
+      "org_id": "...",
+      "org_name": "Acme Corp",
+      "org_domain": "acme.com",
+      "user_role": "admin"
+    }
+  ]
+}
+```
+
+**Error Responses:**
+- `400` - Invalid email format or weak password
+- `409` - User already exists
+- `500` - Server error
+
+---
+
+### POST /auth/login
+
+Authenticate with email and password.
+
+**Request:**
+```json
+POST /auth/login
+Content-Type: application/json
+
+{
+  "u_email": "john@example.com",
+  "u_password": "SecurePass123!",
+  "u_timezone": "America/New_York"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Login successful",
+  "u_id": "550e8400-e29b-41d4-a716-446655440000",
+  "u_email": "john@example.com",
+  "u_first_name": "John",
+  "u_last_name": "Doe",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "organisations": [...],
+  "role": "admin",
+  "permissions": {
+    "meetings": ["view", "create", "edit", "delete"],
+    "reports": ["view", "create", "edit", "delete"]
+  }
+}
+```
+
+**Error Responses:**
+- `400` - Missing required fields
+- `401` - Invalid credentials
+- `500` - Server error
+
+---
+
+### POST /auth/google
+
+Authenticate using Google OAuth token.
+
+**Request:**
+```json
+POST /auth/google
+Content-Type: application/json
+
+{
+  "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij...",
+  "u_timezone": "America/New_York"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Google authentication successful",
+  "u_id": "550e8400-e29b-41d4-a716-446655440000",
+  "u_email": "john@gmail.com",
+  "u_first_name": "John",
+  "u_last_name": "Doe",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "new_user": false,
+  "organisations": [...]
+}
+```
+
+**How it works:**
+1. Verify Google ID token signature
+2. Extract email, name from token
+3. Check if user exists
+4. If new user: create account
+5. Auto-join organization by email domain
+6. Return user data with JWT token
+
+---
+
+### POST /auth/email_verification/start
+
+Initiate email verification with OTP.
+
+**Request:**
+```json
+POST /auth/email_verification/start
+Content-Type: application/json
+Authorization: Bearer {access_token}
+
+{
+  "u_email": "john@example.com"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "OTP sent to email",
+  "expires_in": 300
+}
+```
+
+**Rate Limiting:** Max 3 OTP requests per hour
+
+---
+
+### POST /auth/email_verification/verify
+
+Verify email using OTP.
+
+**Request:**
+```json
+POST /auth/email_verification/verify
+Content-Type: application/json
+Authorization: Bearer {access_token}
+
+{
+  "u_email": "john@example.com",
+  "otp": "123456"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Email verified successfully"
+}
+```
+
+**Error Responses:**
+- `400` - Invalid or expired OTP
+- `404` - User not found
+- `429` - Too many attempts
+
+---
+
+### POST /auth/reset_password/start
+
+Initiate password reset flow.
+
+**Request:**
+```json
+POST /auth/reset_password/start
+Content-Type: application/json
+
+{
+  "u_email": "john@example.com"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "OTP sent to email for password reset",
+  "expires_in": 3600
+}
+```
+
+**Rate Limiting:** Max 3 requests per hour
+
+---
+
+### POST /auth/reset_password/verify
+
+Verify password reset OTP and receive access hash.
+
+**Request:**
+```json
+POST /auth/reset_password/verify
+Content-Type: application/json
+
+{
+  "u_email": "john@example.com",
+  "otp": "654321"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "OTP verified",
+  "access_hash": "a1b2c3d4e5f6...",
+  "expires_in": 300
+}
+```
+
+**Note:** `access_hash` is valid for 5 minutes and required for the final password change.
+
+---
+
+### POST /auth/reset_password/change
+
+Complete password reset with new password.
+
+**Request:**
+```json
+POST /auth/reset_password/change
+Content-Type: application/json
+
+{
+  "access_hash": "a1b2c3d4e5f6...",
+  "u_new_password": "NewSecurePass456!"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Password changed successfully"
+}
+```
+
+**Error Responses:**
+- `400` - Invalid access_hash or expired
+- `400` - Weak password
+- `500` - Server error
+
+---
+
+## Using the Access Token
+
+Once authenticated, include the JWT token in the Authorization header for all subsequent requests:
+
+```bash
+curl -X GET https://api.gistly.ai/api/v1/meetings/all \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+### Token Expiration
+
+- **JWT tokens** expire after 7 days
+- **Password reset hashes** expire after 5 minutes
+- **OTP codes** expire after 5 minutes (verification) or 60 minutes (reset)
+
+### Token Refresh
+
+Currently, there is no token refresh endpoint. Users must re-authenticate when the token expires.
+
+---
+
+## Multi-Organization Support
+
+Users can belong to multiple organizations. After login, the response includes all accessible organizations:
+
+```json
+{
+  "organisations": [
+    {
+      "org_id": "org-1",
+      "org_name": "Acme Corp",
+      "user_role": "admin"
+    },
+    {
+      "org_id": "org-2",
+      "org_name": "Startup Inc",
+      "user_role": "user"
+    }
+  ]
+}
+```
+
+### Select Active Workspace
+
+```json
+POST /organisations/workspace/select
+Authorization: Bearer {access_token}
+
+{
+  "org_id": "org-2"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "message": "Workspace selected",
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "org_id": "org-2",
+  "org_name": "Startup Inc",
+  "role": "user",
+  "permissions": {...}
+}
+```
+
+---
+
+## API Key Authentication
+
+For service-to-service integration, use API key authentication:
+
+```bash
+curl -X GET https://api.gistly.ai/api/v1/meetings/all \
+  -H "X-API-Key: your-api-key" \
+  -H "X-Org-Id: org-2"
+```
+
+**Security Notes:**
+- API keys are bound to organizations
+- Include `X-Org-Id` header to specify the organization context
+- API keys can be rotated from the admin panel
+
+---
+
+## Frontend Integration
+
+### Login Flow
+
+```typescript
+// src/services/api/auth/signin-api.ts
+export async function signInWithCredentials(
+  email: string,
+  password: string
+): Promise<User> {
+  const response = await postAPI('/auth/login', {
+    u_email: email,
+    u_password: password,
+    u_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
+
+  // Save token to localStorage
+  saveItemToLocalStorage('user', response);
+
+  return response;
+}
+```
+
+### Google OAuth Flow
+
+```typescript
+// Get Google ID token from frontend
+const googleIdToken = await getGoogleIdToken();
+
+// Send to backend
+const response = await postAPI('/auth/google', {
+  id_token: googleIdToken,
+  u_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+});
+
+// Save user with token
+saveItemToLocalStorage('user', response);
+```
+
+### Protected API Calls
+
+```typescript
+// Token is automatically included from localStorage
+const meetings = await getAPI('/meetings/all', { page: '1' });
+
+// If 401, automatic redirect to sign-in
+// See: src/services/api/api-utils.ts
+```
+
+---
+
+## Error Handling
+
+| Error Code | Description | Action |
+|------------|-------------|--------|
+| `MISSING_CREDENTIALS` | Email or password not provided | Prompt user for credentials |
+| `INVALID_CREDENTIALS` | Wrong email or password | Show error, allow retry |
+| `WEAK_PASSWORD` | Password doesn't meet requirements | Show password requirements |
+| `USER_EXISTS` | Email already registered | Offer login or password reset |
+| `INVALID_OTP` | OTP is incorrect or expired | Allow resend or retry |
+| `RATE_LIMITED` | Too many OTP requests | Wait before retrying |
+| `INVALID_TOKEN` | JWT token is invalid | Redirect to login |
+
+---
+
+## Testing
+
+### cURL Examples
+
+```bash
+# Sign up new user
+curl -X POST https://api.gistly.ai/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "u_email": "test@example.com",
+    "u_password": "TestPass123!",
+    "u_first_name": "Test",
+    "u_last_name": "User",
+    "u_timezone": "UTC"
+  }'
+
+# Login
+curl -X POST https://api.gistly.ai/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "u_email": "test@example.com",
+    "u_password": "TestPass123!",
+    "u_timezone": "UTC"
+  }'
+
+# Access protected endpoint
+curl -X GET https://api.gistly.ai/api/v1/meetings/all \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+---
+
+## Next Steps
+
+- Learn about [Error Handling](/api-reference/error-handling)
+- Explore [Meetings API](/api-reference/meetings)
+- Review [Users API](/api-reference/users)

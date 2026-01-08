@@ -1,0 +1,484 @@
+---
+title: "Reports API"
+description: "Analytics and reporting API endpoints"
+icon: "chart-bar"
+openapi: "POST /reports"
+---
+
+# Reports API
+
+Complete reports API documentation for Gistly Call Analytics analytics.
+
+## Overview
+
+The reports API provides:
+- Overview metrics (total calls, quality scores, trends)
+- Custom report generation
+- Saved report management
+- Batch endpoints for performance
+- Dashboard widget data
+
+---
+
+## V1 Endpoints (Legacy)
+
+### Overview Metrics
+
+These endpoints provide pre-aggregated metrics for dashboards.
+
+#### POST /reports/overview/total-calls
+
+Total call count for a time period with comparison to previous period.
+
+**Request:**
+```json
+POST /api/v1/reports/overview/total-calls
+Authorization: Bearer {token}
+
+{
+  "u_id": "user-uuid",
+  "org_id": "org-uuid",
+  "from_date": "2024-01-01",
+  "to_date": "2024-01-31",
+  "agents": ["agent-uuid-1", "agent-uuid-2"]
+}
+```
+
+**Response:**
+```json
+{
+  "total_calls": 150,
+  "change": 25,
+  "change_percentage": 20.0
+}
+```
+
+#### POST /reports/overview/quality-score
+
+Average quality score across all meetings.
+
+**Request:** Same as above
+
+**Response:**
+```json
+{
+  "average_score": 75.5,
+  "change": 5.2,
+  "change_percentage": 7.4
+}
+```
+
+#### POST /reports/overview/coverage
+
+Percentage of meetings processed.
+
+**Response:**
+```json
+{
+  "coverage": 85.5,
+  "processed": 150,
+  "total": 175
+}
+```
+
+#### POST /reports/overview/red-flag-rate
+
+Percentage of calls with red flags.
+
+**Response:**
+```json
+{
+  "red_flag_rate": 0.15,
+  "flagged_calls": 23,
+  "total_calls": 150
+}
+```
+
+---
+
+### Trend Analysis
+
+#### POST /reports/trend/scores
+
+Weekly or daily score trends.
+
+**Request:**
+```json
+POST /api/v1/reports/trend/scores
+
+{
+  "u_id": "user-uuid",
+  "org_id": "org-uuid",
+  "from_date": "2024-01-01",
+  "to_date": "2024-01-31",
+  "granularity": "week"
+}
+```
+
+**Response:**
+```json
+{
+  "data": [
+    {
+      "week_start_date": "2024-01-01",
+      "week_avg_score": 72.5
+    },
+    {
+      "week_start_date": "2024-01-08",
+      "week_avg_score": 78.2
+    }
+  ]
+}
+```
+
+---
+
+## V2 Endpoints (Current)
+
+### POST /api/v2/reports/run
+
+Execute ad-hoc report with flexible configuration.
+
+**Request:**
+```json
+POST /api/v2/reports/run
+Authorization: Bearer {token}
+
+{
+  "report_type": "INSIGHT",
+  "datasource": {
+    "kind": "object",
+    "object": "meetings"
+  },
+  "time_range": {
+    "preset": "LAST_30_DAYS"
+  },
+  "metric": "total_calls",
+  "group_by": "m_status",
+  "filters": {
+    "red_flag_only": true
+  }
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `report_type` | string | Yes | `INSIGHT`, `FUNNEL`, `TIME_IN_STAGE`, `STAGE_CHANGED` |
+| `datasource` | object | Yes | Data source configuration |
+| `datasource.kind` | string | Yes | `object`, `meeting` |
+| `datasource.object` | string | Yes | Object name (if kind=object) |
+| `time_range` | object | Yes | Time range configuration |
+| `time_range.preset` | string | Yes | `TODAY`, `YESTERDAY`, `LAST_7_DAYS`, `LAST_30_DAYS`, `THIS_MONTH`, `CUSTOM` |
+| `time_range.from` | string | No | Required if preset=CUSTOM |
+| `time_range.to` | string | No | Required if preset=CUSTOM |
+| `metric` | string | Yes | Metric to calculate |
+| `group_by` | string | No | Field to group by |
+| `filters` | object | No | Additional filters |
+
+**Report Types:**
+
+- **INSIGHT**: Standard aggregation reports
+- **FUNNEL**: Funnel analysis with stages
+- **TIME_IN_STAGE**: Time spent in each stage
+- **STAGE_CHANGED**: Stage transition analysis
+
+**Response (200 OK):**
+```json
+{
+  "rows": [
+    {
+      "m_status": "completed",
+      "total_calls": 120,
+      "avg_duration": 1800
+    },
+    {
+      "m_status": "cancelled",
+      "total_calls": 5,
+      "avg_duration": 300
+    }
+  ],
+  "totals": {
+    "total_calls": 125
+  },
+  "query_stats": {
+    "execution_time_ms": 45,
+    "rows_scanned": 5000
+  }
+}
+```
+
+---
+
+### Saved Reports
+
+#### GET /api/v2/reports/saved
+
+List all saved reports for current user.
+
+**Request:**
+```http
+GET /api/v2/reports/saved
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "saved_reports": [
+    {
+      "sr_id": "report-uuid",
+      "sr_name": "Weekly Sales Calls",
+      "sr_config": {...},
+      "created_at": "2024-01-01T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### POST /api/v2/reports/saved
+
+Create a new saved report.
+
+**Request:**
+```json
+POST /api/v2/reports/saved
+
+{
+  "sr_name": "My Dashboard Report",
+  "sr_description": "Weekly metrics",
+  "sr_config": {
+    "report_type": "INSIGHT",
+    "datasource": {...},
+    "time_range": {...},
+    "metric": "total_calls"
+  }
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "sr_id": "new-report-uuid",
+  "message": "Report saved successfully"
+}
+```
+
+#### PATCH /api/v2/reports/saved/{id}
+
+Update a saved report.
+
+**Request:**
+```json
+PATCH /api/v2/reports/saved/{id}
+
+{
+  "sr_name": "Updated Report Name",
+  "sr_config": {...}
+}
+```
+
+#### DELETE /api/v2/reports/saved/{id}
+
+Delete a saved report.
+
+**Response (200 OK):**
+```json
+{
+  "message": "Report deleted successfully"
+}
+```
+
+---
+
+## Batch Endpoints (Performance Optimized)
+
+Batch endpoints reduce API calls by ~80% by returning multiple metrics in one request.
+
+### POST /api/v2/reports/batch/overview-stats
+
+Get 5 overview stats in 1 call.
+
+**Request:**
+```json
+POST /api/v2/reports/batch/overview-stats
+
+{
+  "from_date": "2024-01-01",
+  "to_date": "2024-01-31"
+}
+```
+
+**Response:**
+```json
+{
+  "total_calls": 150,
+  "total_minutes": 4500,
+  "quality_score": 75.5,
+  "coverage": 85.5,
+  "red_flag_rate": 0.15
+}
+```
+
+### POST /api/v2/reports/batch/scores
+
+Get weekly, category, and parameter scores.
+
+**Request:** Same as above
+
+**Response:**
+```json
+{
+  "weekly_scores": [...],
+  "category_scores": [...],
+  "parameter_scores": [...]
+}
+```
+
+### POST /api/v2/reports/batch/trends
+
+Get call count and duration trends.
+
+**Response:**
+```json
+{
+  "count_trend": [...],
+  "duration_trend": [...]
+}
+```
+
+### POST /api/v2/reports/batch/insights
+
+Get red flags, alignment, purpose, and keywords.
+
+**Response:**
+```json
+{
+  "red_flags": [...],
+  "alignment": 0.85,
+  "purpose": "Sales",
+  "keywords": ["pricing", "budget", "timeline"]
+}
+```
+
+---
+
+## Integration Examples
+
+### Python
+
+```python
+import requests
+
+headers = {"Authorization": f"Bearer {token}"}
+
+# Run report
+report_config = {
+    "report_type": "INSIGHT",
+    "datasource": {"kind": "object", "object": "meetings"},
+    "time_range": {"preset": "LAST_30_DAYS"},
+    "metric": "total_calls",
+    "group_by": "m_status"
+}
+
+response = requests.post(
+    "https://api.gistly.ai/api/v2/reports/run",
+    headers=headers,
+    json=report_config
+)
+
+report = response.json()
+for row in report["rows"]:
+    print(f"{row['m_status']}: {row['total_calls']} calls")
+```
+
+### JavaScript
+
+```javascript
+const response = await fetch('https://api.gistly.ai/api/v2/reports/run', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    report_type: 'INSIGHT',
+    datasource: { kind: 'object', object: 'meetings' },
+    time_range: { preset: 'LAST_30_DAYS' },
+    metric: 'total_calls',
+    group_by: 'm_status'
+  })
+});
+
+const report = await response.json();
+report.rows.forEach(row => {
+  console.log(`${row.m_status}: ${row.total_calls} calls`);
+});
+```
+
+---
+
+## Service Code Example
+
+```python
+# app/services/report_services.py
+
+@cache_result(ttl=900)  # 15 minute cache
+def get_report_total_calls(data: dict) -> tuple:
+    """
+    Get total call count for a period.
+    """
+    try:
+        user_id = data.get('u_id')
+        org_id = data.get('org_id')
+        from_date = data.get('from_date')
+        to_date = data.get('to_date')
+        agents = data.get('agents', [])
+
+        # Build query
+        query = Meeting.query.filter(
+            Meeting.m_org_id == org_id,
+            Meeting.m_status == 'completed',
+            Meeting.m_start_time >= from_date,
+            Meeting.m_end_time <= to_date
+        )
+
+        # Filter by agents
+        if agents:
+            query = query.filter(Meeting.m_user_id.in_(agents))
+
+        # Get count
+        total_calls = query.count()
+
+        # Calculate change from previous period
+        prev_from_date = calculate_previous_period(from_date, to_date)[0]
+        prev_to_date = calculate_previous_period(from_date, to_date)[1]
+
+        prev_count = query.filter(
+            Meeting.m_start_time >= prev_from_date,
+            Meeting.m_end_time <= prev_to_date
+        ).count()
+
+        change = total_calls - prev_count
+        change_percentage = (change / prev_count * 100) if prev_count > 0 else 0
+
+        return jsonify({
+            "total_calls": total_calls,
+            "change": change,
+            "change_percentage": round(change_percentage, 2)
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error getting total calls: {str(e)}")
+        return jsonify({"message": "Failed to get total calls"}), 500
+```
+
+---
+
+## Next Steps
+
+- Learn about [Meetings API](/api-reference/meetings)
+- Review [Error Handling](/api-reference/error-handling)
+- Explore [Backend Services](/backend/services)

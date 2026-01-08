@@ -1,0 +1,143 @@
+---
+title: "Tickets API"
+description: "Ticket system and management API endpoints"
+icon: "ticket"
+openapi: "GET /api/tickets"
+---
+
+# Tickets API
+
+Ticket system integration for Freshdesk and custom ticketing.
+
+## Overview
+
+The tickets API handles:
+- Ticket CRUD operations
+- Ticket messages
+- SLA tracking
+- SOP compliance
+- Ticket red flags
+
+---
+
+## Endpoints
+
+### GET /api/tickets
+
+List all tickets with filtering.
+
+**Request:**
+```http
+GET /api/v1/tickets?page=1&page_size=20&status=Open
+Authorization: Bearer {token}
+```
+
+**Response:**
+```json
+{
+  "tickets": [
+    {
+      "t_id": "ticket-uuid",
+      "t_subject": "Login issue",
+      "t_status": "Open",
+      "t_priority": "High",
+      "t_source": "freshdesk",
+      "t_external_id": "12345",
+      "created_at": "2024-01-15T10:00:00Z"
+    }
+  ],
+  "pagination": {...}
+}
+```
+
+### GET /api/tickets/{t_id}
+
+Get ticket details.
+
+**Response:**
+```json
+{
+  "t_id": "ticket-uuid",
+  "t_subject": "Login issue",
+  "t_description": "User cannot access account...",
+  "t_status": "Open",
+  "t_priority": "High",
+  "requester": {
+    "name": "John Doe",
+    "email": "john@example.com"
+  },
+  "messages": [...],
+  "sla_state": {...},
+  "sop_state": {...}
+}
+```
+
+### POST /api/tickets/{t_id}/messages
+
+Add message to ticket.
+
+**Request:**
+```json
+POST /api/v1/tickets/{t_id}/messages
+
+{
+  "body": "Here's an update on the issue...",
+  "is_internal": false
+}
+```
+
+---
+
+## SLA Tracking
+
+### GET /api/tickets/{t_id}/sla
+
+Get SLA status for a ticket.
+
+**Response:**
+```json
+{
+  "sla_status": "on_track",
+  "sla_breach_time": "2024-01-16T10:00:00Z",
+  "time_remaining": 86400,
+  "percentage_elapsed": 50
+}
+```
+
+### POST /api/sla/tickets/{t_id}/recompute
+
+Recompute SLA for a ticket.
+
+---
+
+## SOP Compliance
+
+### GET /api/tickets/{t_id}/sop
+
+Get SOP compliance status.
+
+**Response:**
+```json
+{
+  "sop_compliant": true,
+  "violations": [],
+  "checklist_completion": 100
+}
+```
+
+---
+
+## Cashfree Integration
+
+### POST /api/cashfree/webhooks/tickets
+
+Receive Freshdesk ticket updates via Cashfree.
+
+See [Webhooks API](/api-reference/webhooks) for details.
+
+---
+
+## Next Steps
+
+- Learn about [Webhooks API](/api-reference/webhooks)
+- Explore [Object System API](/api-reference/objects)
