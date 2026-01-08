@@ -1,0 +1,1810 @@
+---
+title: "API Endpoints"
+description: "Detailed API endpoint reference for the Gistly Call Analytics backend"
+icon: "endpoint"
+---
+
+# API Endpoints
+
+This document provides comprehensive documentation for all API endpoints in the Gistly Call Analytics backend. The backend is built with Flask and follows RESTful conventions.
+
+## Authentication
+
+All endpoints require authentication unless explicitly noted. Include your access token in the Authorization header:
+
+```bash
+Authorization: Bearer <your_access_token>
+```
+
+---
+
+## Authentication Endpoints
+
+### User Signup
+
+Create a new user account.
+
+```http
+POST /auth/signup
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| u_email | string | Yes | User email address |
+| u_password | string | Yes | User password |
+
+**Response:**
+
+```json
+{
+  "message": "User created successfully",
+  "user_id": "uuid",
+  "access_token": "string"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "u_email": "user@example.com",
+    "u_password": "securepassword"
+  }'
+```
+
+---
+
+### User Login
+
+Authenticate an existing user.
+
+```http
+POST /auth/login
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| u_email | string | Yes | User email address |
+| u_password | string | Yes | User password |
+
+**Response:**
+
+```json
+{
+  "message": "Login successful",
+  "user_id": "uuid",
+  "access_token": "string",
+  "refresh_token": "string"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "u_email": "user@example.com",
+    "u_password": "securepassword"
+  }'
+```
+
+---
+
+### Google Authentication
+
+Authenticate or register using Google OAuth.
+
+```http
+POST /auth/google
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| id_token | string | Yes | Google OAuth ID token |
+
+**Response:**
+
+```json
+{
+  "message": "Authentication successful",
+  "user_id": "uuid",
+  "access_token": "string",
+  "is_new_user": false
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/auth/google \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id_token": "google_oauth_id_token"
+  }'
+```
+
+---
+
+### Email Verification
+
+Initiate or verify email verification.
+
+```http
+POST /auth/email_verification/<method>
+```
+
+**Methods:**
+
+- `start` - Send verification OTP to email
+- `verify` - Verify OTP code
+- `resend` - Resend verification OTP
+
+**Request Body (start/resend):**
+
+```json
+{
+  "u_email": "user@example.com"
+}
+```
+
+**Request Body (verify):**
+
+```json
+{
+  "u_email": "user@example.com",
+  "otp": "123456"
+}
+```
+
+**Example:**
+
+```bash
+# Start verification
+curl -X POST https://api.gistly.com/auth/email_verification/start \
+  -H "Content-Type: application/json" \
+  -d '{"u_email": "user@example.com"}'
+
+# Verify OTP
+curl -X POST https://api.gistly.com/auth/email_verification/verify \
+  -H "Content-Type: application/json" \
+  -d '{"u_email": "user@example.com", "otp": "123456"}'
+```
+
+---
+
+### Password Reset
+
+Reset user password using OTP verification.
+
+```http
+POST /auth/reset_password/<method>
+```
+
+**Methods:**
+
+- `start` - Send reset OTP to email
+- `verify` - Verify OTP and get access hash
+- `change` - Change password using access hash
+- `resend` - Resend reset OTP
+
+**Request Body (start/resend):**
+
+```json
+{
+  "u_email": "user@example.com"
+}
+```
+
+**Request Body (verify):**
+
+```json
+{
+  "u_email": "user@example.com",
+  "otp": "123456"
+}
+```
+
+**Request Body (change):**
+
+```json
+{
+  "access_hash": "hash_from_verify",
+  "u__new_password": "newsecurepassword"
+}
+```
+
+**Example:**
+
+```bash
+# Start password reset
+curl -X POST https://api.gistly.com/auth/reset_password/start \
+  -H "Content-Type: application/json" \
+  -d '{"u_email": "user@example.com"}'
+
+# Verify OTP
+curl -X POST https://api.gistly.com/auth/reset_password/verify \
+  -H "Content-Type: application/json" \
+  -d '{"u_email": "user@example.com", "otp": "123456"}'
+
+# Change password
+curl -X POST https://api.gistly.com/auth/reset_password/change \
+  -H "Content-Type: application/json" \
+  -d '{"access_hash": "hash", "u__new_password": "newpassword"}'
+```
+
+---
+
+## Meetings Endpoints
+
+### Get All Meetings
+
+Retrieve all meetings with optional filtering. Supports both GET and POST methods.
+
+```http
+GET /meetings/all
+POST /meetings/all
+```
+
+**Query Parameters (GET):**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| u_id | string | Yes | User ID |
+| org_id | string | No | Organization ID filter |
+| start_date | string | No | Filter by start date (ISO 8601) |
+| end_date | string | No | Filter by end date (ISO 8601) |
+| limit | integer | No | Maximum results (default: 50) |
+| offset | integer | No | Pagination offset |
+
+**Request Body (POST):**
+
+Same parameters as GET, but in JSON body. Use POST when sending large lists of agent IDs.
+
+**Response:**
+
+```json
+{
+  "meetings": [
+    {
+      "m_id": "uuid",
+      "m_name": "Meeting Name",
+      "m_date": "2024-01-08T10:00:00Z",
+      "m_duration": 3600,
+      "m_status": "MEETING_COMPLETED",
+      "m_user_id": "uuid",
+      "participants": []
+    }
+  ],
+  "total": 100,
+  "page": 1
+}
+```
+
+**Example:**
+
+```bash
+# GET request
+curl -X GET "https://api.gistly.com/meetings/all?u_id=uuid&limit=10" \
+  -H "Authorization: Bearer <token>"
+
+# POST request with filters
+curl -X POST https://api.gistly.com/meetings/all \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "u_id": "uuid",
+    "org_id": "uuid",
+    "start_date": "2024-01-01T00:00:00Z",
+    "end_date": "2024-01-31T23:59:59Z",
+    "limit": 50
+  }'
+```
+
+---
+
+### Get Today's Meetings
+
+Retrieve all meetings scheduled for today.
+
+```http
+GET /meetings/today
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| u_id | string | Yes | User ID |
+| org_id | string | No | Organization ID filter |
+
+**Response:**
+
+```json
+{
+  "meetings": [
+    {
+      "m_id": "uuid",
+      "m_name": "Meeting Name",
+      "m_date": "2024-01-08T10:00:00Z",
+      "m_status": "MEETING_COMPLETED"
+    }
+  ],
+  "count": 5
+}
+```
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/meetings/today?u_id=uuid" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Upload Meeting
+
+Upload a meeting audio/video file for processing.
+
+```http
+POST /meetings/upload-meeting
+```
+
+**Request:** Multipart form data
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| m_audio | file | Yes | Audio/video file |
+| m_name | string | No | Meeting name (defaults to filename) |
+| tp_id | string | No | Template ID for analysis |
+| is_summary | string | No | Generate summary (true/false) |
+| sa_id | string | No | Sales agent ID (admin only) |
+
+**Response:**
+
+```json
+{
+  "message": "Meeting uploaded successfully",
+  "meeting_id": "uuid",
+  "status": "PROCESSING",
+  "m_url": "upload-meeting"
+}
+```
+
+**Supported Formats:**
+
+- Audio: mp3, wav, aac, flac, ogg, m4a
+- Video: mp4, mkv, avi, mov, wmv, flv, webm
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/meetings/upload-meeting \
+  -H "Authorization: Bearer <token>" \
+  -F "m_audio=@meeting.mp3" \
+  -F "m_name=Client Call" \
+  -F "tp_id=template_uuid" \
+  -F "is_summary=true"
+```
+
+---
+
+### Upload Bulk Meetings
+
+Upload multiple meeting files at once.
+
+```http
+POST /meetings/upload-bulk-meetings
+```
+
+**Request:** Multipart form data
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| files | file[] | Yes | Array of audio/video files |
+| is_csv | string | No | Upload type (true/false) |
+| tp_id | string | No | Template ID |
+| is_summary | string | No | Generate summary (true/false) |
+| sa_id | string | No | Sales agent ID (admin only) |
+
+**Response:**
+
+```json
+{
+  "message": "Bulk upload started",
+  "total_files": 10,
+  "processed": 10,
+  "failed": 0,
+  "meeting_ids": ["uuid1", "uuid2"]
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/meetings/upload-bulk-meetings \
+  -H "Authorization: Bearer <token>" \
+  -F "files=@meeting1.mp3" \
+  -F "files=@meeting2.mp3" \
+  -F "is_summary=true" \
+  -F "tp_id=template_uuid"
+```
+
+---
+
+### Get Meeting Details
+
+Retrieve detailed information about a specific meeting.
+
+```http
+GET /meetings/meeting/get
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| m_id | string | Yes | Meeting ID |
+| u_id | string | Yes | User ID |
+
+**Response:**
+
+```json
+{
+  "m_id": "uuid",
+  "m_name": "Meeting Name",
+  "m_date": "2024-01-08T10:00:00Z",
+  "m_duration": 3600,
+  "m_status": "MEETING_COMPLETED",
+  "m_user_id": "uuid",
+  "transcript": "Full transcript text...",
+  "summary": "Meeting summary...",
+  "sentiments": {
+    "positive": 0.7,
+    "neutral": 0.2,
+    "negative": 0.1
+  },
+  "participants": [
+    {
+      "name": "John Doe",
+      "speaker_id": "spk1",
+      "talk_ratio": 0.6
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/meetings/meeting/get?m_id=uuid&u_id=uuid" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Delete Meeting
+
+Delete a meeting and all associated data.
+
+```http
+DELETE /meetings/meeting/delete
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| m_id | string | Yes | Meeting ID |
+| u_id | string | Yes | User ID |
+
+**Response:**
+
+```json
+{
+  "message": "Meeting deleted successfully"
+}
+```
+
+**Example:**
+
+```bash
+curl -X DELETE "https://api.gistly.com/meetings/meeting/delete?m_id=uuid&u_id=uuid" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Share Meeting
+
+Generate a shareable link for a meeting.
+
+```http
+POST /meetings/meeting/share
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| m_id | string | Yes | Meeting ID |
+| u_id | string | Yes | User ID |
+| expires_in | integer | No | Link expiration in seconds (default: 604800) |
+
+**Response:**
+
+```json
+{
+  "share_link": "https://gistly.com/share/meeting/uuid",
+  "expires_at": "2024-01-15T10:00:00Z",
+  "access_code": "123456"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/meetings/meeting/share \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "m_id": "uuid",
+    "u_id": "uuid",
+    "expires_in": 86400
+  }'
+```
+
+---
+
+### Get Talk-Listen Ratio
+
+Retrieve talk-to-listen ratio analysis for a meeting.
+
+```http
+GET /meetings/meeting/talk-listen-ratio
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| m_id | string | Yes | Meeting ID |
+
+**Response:**
+
+```json
+{
+  "meeting_id": "uuid",
+  "talk_listen_ratio": {
+    "agent": {
+      "talk_percentage": 35,
+      "listen_percentage": 65
+    },
+    "prospect": {
+      "talk_percentage": 65,
+      "listen_percentage": 35
+    }
+  },
+  "ideal_ratio": {
+      "agent_talk": 30,
+      "prospect_talk": 70
+  },
+  "assessment": "Good"
+}
+```
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/meetings/meeting/talk-listen-ratio?m_id=uuid" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+## Red Flags Endpoints
+
+### Get All Red Flags
+
+Retrieve all red flag configurations for an organization. Requires admin access.
+
+```http
+GET /api/red-flags
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| org_id | string | Yes | Organization ID |
+
+**Response:**
+
+```json
+[
+  {
+    "rf_id": "uuid",
+    "org_id": "uuid",
+    "rf_title": "Competitor Mentioned",
+    "rf_detection_criteria": {
+      "keywords": ["competitor", "rival"],
+      "context": "negative"
+    },
+    "rf_severity_level": "high",
+    "rf_notify_roles": ["admin", "manager"],
+    "rf_notification_channels": ["email", "slack"],
+    "rf_enabled": true,
+    "rf_role_call_types": {
+      "sales_agent": "All calls",
+      "sales_manager": "Only mapped calls"
+    }
+  }
+]
+```
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/api/red-flags?org_id=uuid" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Create Red Flag
+
+Create a new red flag configuration. Requires admin access.
+
+```http
+POST /api/red-flags
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| org_id | string | Yes | Organization ID |
+| rf_title | string | Yes | Red flag title |
+| rf_detection_criteria | object | Yes | Detection criteria configuration |
+| rf_severity_level | string | Yes | Severity: low, medium, high |
+| rf_notify_roles | array | No | Roles to notify (default: []) |
+| rf_notification_channels | array | No | Channels: email, slack (default: []) |
+| rf_enabled | boolean | No | Enable flag (default: true) |
+| rf_role_call_types | object | No | Per-role call type filters |
+
+**Response:**
+
+```json
+{
+  "rf_id": "uuid",
+  "org_id": "uuid",
+  "rf_title": "Competitor Mentioned",
+  "rf_detection_criteria": {
+    "keywords": ["competitor"]
+  },
+  "rf_severity_level": "high",
+  "rf_enabled": true,
+  "created_at": "2024-01-08T10:00:00Z"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/api/red-flags \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "org_id": "uuid",
+    "rf_title": "Competitor Mentioned",
+    "rf_detection_criteria": {
+      "keywords": ["competitor", "rival"],
+      "min_confidence": 0.8
+    },
+    "rf_severity_level": "high",
+    "rf_notify_roles": ["admin", "manager"],
+    "rf_notification_channels": ["email"],
+    "rf_enabled": true,
+    "rf_role_call_types": {
+      "sales_agent": "All calls",
+      "sales_manager": "Only mapped calls"
+    }
+  }'
+```
+
+---
+
+### Update Red Flag
+
+Update an existing red flag configuration. Requires admin access.
+
+```http
+PUT /api/red-flags/<flag_id>
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| flag_id | string | Yes | Red flag ID (UUID) |
+
+**Request Body:** Same as Create Red Flag (all fields optional)
+
+**Response:**
+
+```json
+{
+  "rf_id": "uuid",
+  "rf_title": "Updated Title",
+  "rf_severity_level": "medium",
+  "rf_enabled": true,
+  "updated_at": "2024-01-08T11:00:00Z"
+}
+```
+
+**Example:**
+
+```bash
+curl -X PUT https://api.gistly.com/api/red-flags/uuid \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rf_title": "Updated Title",
+    "rf_severity_level": "medium"
+  }'
+```
+
+---
+
+### Delete Red Flag
+
+Delete a red flag configuration. Requires admin access.
+
+```http
+DELETE /api/red-flags/<flag_id>
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| flag_id | string | Yes | Red flag ID (UUID) |
+
+**Response:**
+
+```json
+{
+  "message": "Red flag deleted successfully"
+}
+```
+
+**Example:**
+
+```bash
+curl -X DELETE https://api.gistly.com/api/red-flags/uuid \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Submit Red Flag Feedback
+
+Submit feedback (thumbs up/down) on a detected red flag.
+
+```http
+POST /api/red-flags/feedback
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| drf_id | string | Yes | Detected red flag ID |
+| action | string | Yes | "up" (confirm) or "down" (dismiss) |
+
+**Response:**
+
+```json
+{
+  "message": "Feedback recorded successfully",
+  "drf_id": "uuid",
+  "status": "active"
+}
+```
+
+**Example:**
+
+```bash
+# Confirm red flag (thumbs up)
+curl -X POST https://api.gistly.com/api/red-flags/feedback \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "drf_id": "uuid",
+    "action": "up"
+  }'
+
+# Dismiss red flag (thumbs down)
+curl -X POST https://api.gistly.com/api/red-flags/feedback \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "drf_id": "uuid",
+    "action": "down"
+  }'
+```
+
+---
+
+## Object System Endpoints
+
+The Object System provides a flexible CRM-like data structure for managing custom objects (People, Companies, Deals, etc.).
+
+### Get All Objects
+
+List all objects in the organization with record counts.
+
+```http
+GET /objects
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| status | string | No | Filter: active, inactive, all (default: active) |
+
+**Response:**
+
+```json
+{
+  "objects": [
+    {
+      "obj_id": "uuid",
+      "obj_name": "people",
+      "obj_display_name": "People",
+      "obj_icon": "users",
+      "obj_status": "active",
+      "record_count": 150,
+      "attributes_count": 12
+    },
+    {
+      "obj_id": "uuid",
+      "obj_name": "companies",
+      "obj_display_name": "Companies",
+      "obj_icon": "building",
+      "obj_status": "active",
+      "record_count": 45,
+      "attributes_count": 8
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/objects?status=active" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Create Object
+
+Create a new custom object.
+
+```http
+POST /objects
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| key | string | Yes | Object key (unique, lowercase) |
+| label | string | Yes | Display name |
+| icon | string | No | Icon name (default: "cube") |
+
+**Response:**
+
+```json
+{
+  "object": {
+    "obj_id": "uuid",
+    "obj_name": "deals",
+    "obj_display_name": "Deals",
+    "obj_icon": "dollar-sign",
+    "obj_status": "active",
+    "created_at": "2024-01-08T10:00:00Z"
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/objects \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "deals",
+    "label": "Deals",
+    "icon": "dollar-sign"
+  }'
+```
+
+---
+
+### Get Object Attributes
+
+List all attributes for an object.
+
+```http
+GET /objects/<o_key>/attributes
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| o_key | string | Yes | Object key (e.g., "people", "companies") |
+
+**Response:**
+
+```json
+{
+  "attributes": [
+    {
+      "attr_id": "uuid",
+      "attr_name": "email",
+      "attr_display_name": "Email",
+      "attr_type": "email",
+      "attr_is_required": true,
+      "attr_is_unique": true,
+      "attr_is_indexed": true,
+      "attr_order": 1
+    },
+    {
+      "attr_id": "uuid",
+      "attr_name": "phone",
+      "attr_display_name": "Phone",
+      "attr_type": "phone",
+      "attr_is_required": false,
+      "attr_is_unique": false,
+      "attr_order": 2
+    }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/objects/people/attributes" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Create Attribute
+
+Add a new attribute to an object.
+
+```http
+POST /objects/<uuid:o_id>/attributes
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| o_id | string | Yes | Object ID (UUID) |
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| key | string | Yes | Attribute key |
+| label | string | No | Display label |
+| type | string | Yes | Data type |
+| required | boolean | No | Required field (default: false) |
+| unique | boolean | No | Unique constraint (default: false) |
+| indexed | boolean | No | Create index (default: false) |
+| settings | object | No | Type-specific settings |
+| validation | object | No | Validation rules |
+| order | integer | No | Display order |
+
+**Attribute Types:**
+
+- `text` - Plain text
+- `email` - Email address
+- `phone` - Phone number
+- `number` - Numeric value
+- `date` - Date picker
+- `datetime` - Date and time
+- `boolean` - True/false
+- `select` - Single select dropdown
+- `multiselect` - Multi-select dropdown
+- `relationship` - Relation to another object
+- `richtext` - Rich text editor
+- `url` - URL/link
+- `currency` - Monetary value
+
+**Response:**
+
+```json
+{
+  "attribute": {
+    "attr_id": "uuid",
+    "attr_name": "email",
+    "attr_display_name": "Email",
+    "attr_type": "email",
+    "attr_is_required": true,
+    "attr_is_unique": true
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/objects/uuid/attributes \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "email",
+    "label": "Email Address",
+    "type": "email",
+    "required": true,
+    "unique": true,
+    "indexed": true
+  }'
+```
+
+---
+
+### List Records
+
+Get records for an object with filtering and pagination.
+
+```http
+GET /objects/<o_key>/records
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| o_key | string | Yes | Object key |
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| filters | string | No | JSON string of filters |
+| sort | string | No | JSON string of sort config |
+| page | integer | No | Page number (default: 1) |
+| size | integer | No | Page size (default: 25) |
+
+**Filter Format:**
+
+```json
+{
+  "and": [
+    {"field": "name", "operator": "contains", "value": "John"},
+    {"field": "status", "operator": "eq", "value": "active"}
+  ]
+}
+```
+
+**Sort Format:**
+
+```json
+[
+  {"field": "name", "direction": "asc"},
+  {"field": "created_at", "direction": "desc"}
+]
+```
+
+**Response:**
+
+```json
+{
+  "records": [
+    {
+      "rec_id": "uuid",
+      "rec_name": "John Doe",
+      "rec_attrs": {
+        "email": "john@example.com",
+        "phone": "+1234567890"
+      },
+      "rec_created_at": "2024-01-08T10:00:00Z",
+      "rec_updated_at": "2024-01-08T10:00:00Z"
+    }
+  ],
+  "total": 150,
+  "page": 1,
+  "size": 25
+}
+```
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/objects/people/records?page=1&size=10" \
+  -H "Authorization: Bearer <token>"
+
+# With filters
+curl -X GET "https://api.gistly.com/objects/people/records?filters=%7B%22and%22%3A%5B%7B%22field%22%3A%22name%22%2C%22operator%22%3A%22contains%22%2C%22value%22%3A%22John%22%7D%5D%7D" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Create Record
+
+Create a new record in an object.
+
+```http
+POST /objects/<o_key>/records
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| o_key | string | Yes | Object key |
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| name | string | Yes | Record name |
+| attrs | object | No | Attribute values |
+
+**Response:**
+
+```json
+{
+  "record": {
+    "rec_id": "uuid",
+    "rec_name": "John Doe",
+    "rec_attrs": {
+      "email": "john@example.com",
+      "phone": "+1234567890",
+      "title": "CEO"
+    },
+    "rec_created_at": "2024-01-08T10:00:00Z"
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/objects/people/records \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "attrs": {
+      "email": "john@example.com",
+      "phone": "+1234567890",
+      "title": "CEO"
+    }
+  }'
+```
+
+---
+
+### Bulk Create Records
+
+Create multiple records in a single request.
+
+```http
+POST /objects/<o_key>/records/bulk
+```
+
+**Request Body:**
+
+```json
+{
+  "records": [
+    {
+      "name": "Record 1",
+      "attrs": {"field1": "value1"}
+    },
+    {
+      "name": "Record 2",
+      "attrs": {"field1": "value2"}
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "created": 2,
+  "failed": 0,
+  "records": [
+    {"rec_id": "uuid1", "name": "Record 1"},
+    {"rec_id": "uuid2", "name": "Record 2"}
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/objects/people/records/bulk \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "records": [
+      {"name": "Jane Doe", "attrs": {"email": "jane@example.com"}},
+      {"name": "Bob Smith", "attrs": {"email": "bob@example.com"}}
+    ]
+  }'
+```
+
+---
+
+### Get Record
+
+Retrieve a specific record by ID.
+
+```http
+GET /objects/<o_key>/records/<uuid:rec_id>
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| o_key | string | Yes | Object key |
+| rec_id | string | Yes | Record ID (UUID) |
+
+**Response:**
+
+```json
+{
+  "record": {
+    "rec_id": "uuid",
+    "rec_name": "John Doe",
+    "rec_attrs": {
+      "email": "john@example.com",
+      "phone": "+1234567890",
+      "title": "CEO",
+      "company": "Acme Corp"
+    },
+    "rec_created_at": "2024-01-08T10:00:00Z",
+    "rec_updated_at": "2024-01-08T11:00:00Z",
+    "rec_archived": false
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/objects/people/records/uuid" \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Update Record
+
+Update an existing record.
+
+```http
+PATCH /objects/<o_key>/records/<uuid:rec_id>
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| o_key | string | Yes | Object key |
+| rec_id | string | Yes | Record ID (UUID) |
+
+**Request Body:** Partial update (all fields optional)
+
+```json
+{
+  "name": "Updated Name",
+  "attrs": {
+    "email": "newemail@example.com"
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "record": {
+    "rec_id": "uuid",
+    "rec_name": "Updated Name",
+    "rec_attrs": {
+      "email": "newemail@example.com"
+    },
+    "rec_updated_at": "2024-01-08T12:00:00Z"
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X PATCH https://api.gistly.com/objects/people/records/uuid \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Smith",
+    "attrs": {
+      "title": "CTO"
+    }
+  }'
+```
+
+---
+
+### Delete Record
+
+Soft delete a record.
+
+```http
+DELETE /objects/<o_key>/records/<uuid:rec_id>
+```
+
+**Response:**
+
+```json
+{
+  "message": "Record deleted successfully",
+  "rec_id": "uuid"
+}
+```
+
+**Example:**
+
+```bash
+curl -X DELETE https://api.gistly.com/objects/people/records/uuid \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Archive/Restore Record
+
+Archive or restore a record.
+
+```http
+PATCH /objects/<o_key>/records/<uuid:rec_id>/archive
+PATCH /objects/<o_key>/records/<uuid:rec_id>/restore
+```
+
+**Request Body (archive):**
+
+```json
+{
+  "is_archived": true
+}
+```
+
+**Response:**
+
+```json
+{
+  "message": "Record archived successfully",
+  "rec_id": "uuid",
+  "rec_archived": true
+}
+```
+
+**Example:**
+
+```bash
+# Archive
+curl -X PATCH https://api.gistly.com/objects/people/records/uuid/archive \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"is_archived": true}'
+
+# Restore
+curl -X PATCH https://api.gistly.com/objects/people/records/uuid/restore \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Export Records
+
+Export records to CSV format.
+
+```http
+GET /objects/<o_key>/records/export
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| columns | string | No | JSON array of columns to export |
+| filters | string | No | JSON filter object |
+| sort | string | No | JSON sort array |
+
+**Response:** CSV file with appropriate headers
+
+**Example:**
+
+```bash
+curl -X GET "https://api.gistly.com/objects/people/records/export?columns=%5B%22name%22%2C%22email%22%5D" \
+  -H "Authorization: Bearer <token>" \
+  -o people.csv
+```
+
+---
+
+### Create List
+
+Create a new list (static or dynamic) for an object.
+
+```http
+POST /lists
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| object_key | string | Yes | Object key |
+| name | string | Yes | List name |
+| description | string | No | List description |
+| type | string | No | List type: static, dynamic (default: static) |
+| stages | array | No | Array of stage names |
+
+**Response:**
+
+```json
+{
+  "list": {
+    "list_id": "uuid",
+    "list_name": "Buying Committee",
+    "list_type": "static",
+    "obj_name": "people",
+    "stages": ["Identified", "Engaged", "Champion"],
+    "created_at": "2024-01-08T10:00:00Z"
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/lists \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "object_key": "people",
+    "name": "Buying Committee",
+    "type": "static",
+    "stages": ["Identified", "Engaged", "Champion", "Decision Maker"]
+  }'
+```
+
+---
+
+### Add List Entries
+
+Add records to a list.
+
+```http
+POST /lists/<uuid:list_id>/entries
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| record_ids | array | Yes | Array of record IDs |
+| stage | string | No | Stage to assign |
+| entry_attrs | object | No | Additional entry attributes |
+
+**Response:**
+
+```json
+{
+  "message": "Entries added successfully",
+  "added": 3,
+  "entries": [
+    {"entry_id": "uuid", "rec_id": "uuid", "stage": "Engaged"}
+  ]
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/lists/uuid/entries \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "record_ids": ["uuid1", "uuid2", "uuid3"],
+    "stage": "Engaged",
+    "entry_attrs": {"note": "High intent"}
+  }'
+```
+
+---
+
+### Create Relationship
+
+Create a relationship between two objects.
+
+```http
+POST /relationships
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| from_object_id | string | Yes | Source object ID |
+| to_object_id | string | Yes | Target object ID |
+| from_attribute_id | string | Yes | Source attribute ID |
+| to_attribute_id | string | Yes | Target attribute ID |
+| relationship_type | string | Yes | one_to_one, one_to_many, many_to_many |
+
+**Response:**
+
+```json
+{
+  "relationship": {
+    "rel_id": "uuid",
+    "from_object": "people",
+    "to_object": "companies",
+    "relationship_type": "many_to_one",
+    "created_at": "2024-01-08T10:00:00Z"
+  }
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/relationships \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from_object_id": "uuid",
+    "to_object_id": "uuid",
+    "from_attribute_id": "uuid",
+    "to_attribute_id": "uuid",
+    "relationship_type": "many_to_one"
+  }'
+```
+
+---
+
+## Organization Endpoints
+
+### Get Organizations
+
+Get all organizations for the current user.
+
+```http
+GET /organisations
+```
+
+**Response:**
+
+```json
+[
+  {
+    "org_id": "uuid",
+    "org_name": "Acme Corp",
+    "org_domain": "acme.com",
+    "org_slug": "acme-corp",
+    "org_logo": "https://...",
+    "is_selected": true,
+    "user_role": "admin"
+  }
+]
+```
+
+**Example:**
+
+```bash
+curl -X GET https://api.gistly.com/organisations \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Create Organization
+
+Create a new organization.
+
+```http
+POST /organisations
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| name | string | Yes | Organization name |
+| creator_id | string | Yes | User ID of creator |
+| org_domain | string | No | Custom domain |
+| org_slug | string | No | URL-friendly slug |
+
+**Response:**
+
+```json
+{
+  "id": "uuid",
+  "name": "New Organization",
+  "creator_id": "uuid",
+  "created_at": "2024-01-08T10:00:00Z"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/organisations \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "New Organization",
+    "creator_id": "uuid",
+    "org_domain": "company.com",
+    "org_slug": "new-org"
+  }'
+```
+
+---
+
+### Select Workspace
+
+Select the active workspace/organization.
+
+```http
+POST /organisations/workspace/select
+```
+
+**Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| org_id | string | Yes | Organization ID to select |
+
+**Response:**
+
+```json
+{
+  "message": "Workspace selected successfully",
+  "org_id": "uuid",
+  "org_name": "Acme Corp"
+}
+```
+
+**Example:**
+
+```bash
+curl -X POST https://api.gistly.com/organisations/workspace/select \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"org_id": "uuid"}'
+```
+
+---
+
+## Error Responses
+
+All endpoints may return errors in the following format:
+
+```json
+{
+  "error": "Error message description",
+  "code": "ERROR_CODE",
+  "details": {}
+}
+```
+
+### Common HTTP Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request - Invalid parameters |
+| 401 | Unauthorized - Invalid or missing token |
+| 403 | Forbidden - Insufficient permissions |
+| 404 | Not Found - Resource doesn't exist |
+| 500 | Internal Server Error |
+
+---
+
+## Rate Limiting
+
+API requests are rate limited based on your plan:
+
+- Free Tier: 100 requests/minute
+- Pro Tier: 1000 requests/minute
+- Enterprise: Custom limits
+
+Rate limit headers are included in responses:
+
+```http
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1704700800
+```
+
+---
+
+## Pagination
+
+List endpoints support pagination using these parameters:
+
+- `page` - Page number (default: 1)
+- `size` - Items per page (default: 25, max: 100)
+
+Paginated responses include:
+
+```json
+{
+  "data": [],
+  "total": 250,
+  "page": 1,
+  "size": 25,
+  "pages": 10
+}
+```
+
+---
+
+## Webhooks
+
+### Configure Webhooks
+
+Set up webhooks to receive notifications about events.
+
+Contact support to configure webhooks for your organization.
+
+---
+
+## SDKs and Libraries
+
+Official SDKs are available for:
+
+- JavaScript/TypeScript
+- Python
+- Go
+
+See the SDK documentation for installation and usage.
+
+---
+
+## Support
+
+For API support, contact:
+
+- Email: api@gistly.com
+- Documentation: https://docs.gistly.com
+- Status Page: https://status.gistly.com

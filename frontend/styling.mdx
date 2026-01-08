@@ -1,0 +1,314 @@
+---
+title: "Styling"
+description: "Styling guidelines and patterns for the Gistly frontend"
+icon: "palette"
+---
+
+# Frontend Styling
+
+## CSS Framework
+
+The frontend uses **Tailwind CSS** as the primary styling solution.
+
+- **Utility-first** - Build designs with utility classes
+- **Responsive** - Mobile-first responsive design
+- **Dark mode** - Built-in dark mode support
+- **Customizable** - Tailwind config extends default theme
+
+## Configuration
+
+### Tailwind Config
+
+Located in `tailwind.config.js`:
+
+```javascript
+module.exports = {
+  darkMode: ['class'],
+  content: ['./src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+      },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+    },
+  },
+  plugins: [require('tailwindcss-animate')],
+};
+```
+
+## Design Tokens
+
+### CSS Variables
+
+Design tokens are defined in `src/app/globals.css`:
+
+```css
+@layer base {
+  :root {
+    /* Base colors */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    /* Primary colors */
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    /* Secondary colors */
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    /* UI elements */
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    /* Feedback colors */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 142.1 76.2% 36.3%;
+    --warning: 32.6 94.6% 43.1%;
+
+    /* Borders and inputs */
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    /* Border radius */
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    /* ... dark mode overrides */
+  }
+}
+```
+
+## Styling Patterns
+
+### Responsive Design
+
+```tsx
+// Mobile-first approach
+<div className="w-full md:w-1/2 lg:w-1/3">
+  Content
+</div>
+
+// Hidden on mobile, visible on desktop
+<div className="hidden md:block">
+  Desktop content
+</div>
+
+// Stack on mobile, side-by-side on desktop
+<div className="flex flex-col md:flex-row gap-4">
+  <div>Item 1</div>
+  <div>Item 2</div>
+</div>
+```
+
+### Dark Mode
+
+```tsx
+// Using dark: prefix
+<div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+  Themed content
+</div>
+
+// With CSS variables
+<div className="bg-background text-foreground">
+  Automatically themed
+</div>
+```
+
+### Spacing
+
+```tsx
+// Padding
+<div className="p-4">    // 1rem
+<div className="px-6">   // horizontal: 1.5rem
+<div className="py-2">   // vertical: 0.5rem
+
+// Margin
+<div className="m-4">    // 1rem
+<div className="mx-auto"> // horizontal center
+<div className="-mt-2">  // negative margin
+
+// Gap (flex/grid)
+<div className="gap-4">  // 1rem between items
+```
+
+### Typography
+
+```tsx
+<h1 className="text-4xl font-bold">Heading</h1>
+<p className="text-base text-muted-foreground">Body text</p>
+<span className="text-sm font-medium">Label</span>
+```
+
+## Component Styling
+
+### Card Component
+
+```tsx
+export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn(
+      'rounded-lg border bg-card text-card-foreground shadow-sm',
+      className
+    )}>
+      {children}
+    </div>
+  );
+}
+```
+
+### Button Styling
+
+```tsx
+const buttonVariants = cva(
+  'inline-flex items-center justify-center rounded-md font-medium transition-colors',
+  {
+    variants: {
+      variant: {
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        outline: 'border border-input bg-background hover:bg-accent',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        link: 'text-primary underline-offset-4 hover:underline',
+      },
+      size: {
+        default: 'h-10 px-4 py-2',
+        sm: 'h-9 rounded-md px-3',
+        lg: 'h-11 rounded-md px-8',
+        icon: 'h-10 w-10',
+      },
+    },
+  }
+);
+```
+
+## Layout Patterns
+
+### Container
+
+```tsx
+<div className="container mx-auto px-4 max-w-7xl">
+  {/* Centered content with max width */}
+</div>
+```
+
+### Grid Layout
+
+```tsx
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  {/* Responsive grid */}
+</div>
+```
+
+### Flex Layout
+
+```tsx
+<div className="flex items-center justify-between gap-4">
+  {/* Horizontal layout with spacing */}
+</div>
+
+<div className="flex flex-col gap-4">
+  {/* Vertical layout with spacing */}
+</div>
+```
+
+## Utilities
+
+### Conditional Classes
+
+Use the `cn` utility from `src/lib/utils.ts`:
+
+```tsx
+import { cn } from '@/lib/utils';
+
+export function MyComponent({ variant, className }) {
+  return (
+    <div className={cn(
+      'base-classes',
+      variant === 'primary' && 'primary-classes',
+      variant === 'secondary' && 'secondary-classes',
+      className
+    )}>
+      Content
+    </div>
+  );
+}
+```
+
+### Text Truncation
+
+```tsx
+<p className="truncate">
+  Text that truncates with ellipsis
+</p>
+
+<p className="line-clamp-3">
+  Text that truncates after 3 lines
+</p>
+```
+
+## Animation
+
+### Transitions
+
+```tsx
+<button className="transition-all duration-200 hover:scale-105">
+  Animated button
+</button>
+```
+
+### Tailwind Animate
+
+```tsx
+<div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+  Animated content
+</div>
+```
+
+## Best Practices
+
+1. **Use utility classes** - Avoid custom CSS when possible
+2. **Responsive design** - Mobile-first approach with `md:` and `lg:` breakpoints
+3. **Consistent spacing** - Use Tailwind's spacing scale
+4. **Dark mode** - Always test in both light and dark modes
+5. **Accessibility** - Ensure sufficient color contrast
+
+## Common Tailwind Classes Reference
+
+| Category | Classes |
+|----------|---------|
+| **Layout** | `container`, `flex`, `grid`, `hidden`, `block` |
+| **Spacing** | `p-*`, `m-*`, `px-*`, `py-*`, `gap-*` |
+| **Sizing** | `w-*`, `h-*`, `max-w-*`, `max-h-*` |
+| **Typography** | `text-*`, `font-*`, `leading-*`, `tracking-*` |
+| **Colors** | `bg-*`, `text-*`, `border-*` |
+| **Borders** | `border`, `rounded-*` |
+| **Effects** | `shadow-*`, `opacity-*` |
+| **Transitions** | `transition-*`, `duration-*`, `ease-*` |
+
+## Next Steps
+
+- Set up [State Management](/frontend/state-management)
+- Configure [API Integration](/frontend/api-integration)
+- Prepare for [Deployment](/frontend/deployment)

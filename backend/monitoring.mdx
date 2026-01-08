@@ -1,0 +1,893 @@
+---
+title: "Monitoring"
+description: "Sentry error tracking, application logging, performance monitoring, and health checks"
+icon: "activity"
+---
+
+# Monitoring
+
+The Gistly Call Analytics backend implements comprehensive monitoring with **Sentry** for error tracking, structured logging, and health checks for operational visibility.
+
+## Sentry Error Tracking
+
+### Overview
+
+The backend integrates **Sentry** for real-time error tracking and performance monitoring:
+
+- **Automatic error capture**: Uncaught exceptions are automatically reported
+- **Stack traces**: Full context for debugging
+- **Release tracking**: Track errors by deployment
+- **Performance monitoring**: Track slow requests and database queries
+- **Alerts**: Get notified of critical errors
+
+### Sentry Setup
+
+#### Installation
+
+```bash
+pip install sentry-sdk[flask]
+```
+
+Add to `requirements.txt`:
+
+```
+sentry-sdk[flask]==1.40.0
+```
+
+#### Configuration
+
+Initialize Sentry in `/backend-meeting-notes/app/__init__.py`:
+
+```python
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.integrations.redis import RedisIntegration
+
+def init_sentry(app):
+    """Initialize Sentry for error tracking."""
+    sentry_sdk.init(
+        dsn=app.config.get("SENTRY_DSN"),
+        integrations=[
+            FlaskIntegration(),
+            SqlalchemyIntegration(),
+            RedisIntegration(),
+        ],
+        traces_sample_rate=0.1,  # Capture 10% of transactions
+        environment=app.config.get("FLASK_ENV", "development"),
+        release=os.getenv("GIT_SHA", "development"),
+        before_send=before_send_transaction,
+    )
+
+def before_send_transaction(event, hint):
+    """Filter sensitive data before sending to Sentry."""
+    # Remove sensitive headers
+    if 'request' in event and 'headers' in event['request']:
+        headers = event['request']['headers']
+        sensitive_keys = ['authorization', 'cookie', 'x-api-key']
+        for key in sensitive_keys:
+            headers.pop(key, None)
+
+    # Filter database query parameters
+    if 'contexts' in event and 'db' in event['contexts']:
+        # Remove potential passwords from queries
+        pass
+
+    return event
+```
+
+Call in app factory:
+
+```python
+def create_app(config_class=Config):
+    app = Flask(__name__)
+
+    # ... other initialization ...
+
+    if app.config.get("SENTRY_DSN"):
+        init_sentry(app)
+
+    return app
+```
+
+### Environment Variables
+
+Add to `.env`:
+
+```bash
+# Sentry
+SENTRY_DSN=https://<your-sentry-dsn>@sentry.io/<project-id>
+SENTRY_ENVIRONMENT=production
+SENTRY_RELEASE=v1.0.0
+```
+
+### Error Reporting
+
+#### Automatic Error Capture
+
+Sentry automatically captures uncaught exceptions:
+
+```python
+@app.route('/api/route')
+def api_route():
+    # This exception is automatically reported to Sentry
+    result = 1 / 0  # ZeroDivisionError
+    return jsonify({"result": result})
+```
+
+#### Manual Error Reporting
+
+For custom error reporting:
+
+```python
+from sentry_sdk import capture_exception, capture_message
+
+try:
+    risky_operation()
+except Exception as e:
+    # Send exception to Sentry
+    capture_exception(e)
+    # Return user-friendly error
+    return jsonify({"error": "Operation failed"}), 500
+
+# Send custom message
+capture_message("User performed important action", level="info")
+```
+
+#### User Context
+
+Add user context for better error tracking:
+
+```python
+from sentry_sdk import set_user
+
+def login(user):
+    # Set user context
+    set_user({
+        "id": str(user.u_id),
+        "email": user.u_email,
+        "org_id": str(user.u_org_id)
+    })
+
+def logout():
+    # Clear user context
+    set_user(None)
+```
+
+#### Custom Tags and Contexts
+
+```python
+from sentry_sdk import set_tag, set_context
+
+# Add tags for filtering
+set_tag("feature", "call-transcription")
+set_tag("org_id", org_id)
+
+# Add custom context
+set_context("meeting", {
+    "meeting_id": meeting_id,
+    "user_id": user_id,
+    "duration": duration
+})
+```
+
+### Performance Monitoring
+
+Track slow endpoints and database queries:
+
+```python
+from sentry_sdk import start_transaction
+
+with start_transaction(op="task", name="process-meeting"):
+    # This transaction is traced
+    process_transcription()
+    generate_summary()
+    calculate_scores()
+```
+
+View performance data in Sentry:
+- **Transaction traces**: See which endpoints are slow
+- **Database queries**: Identify slow queries
+- **HTTP requests**: Track external API calls
+
+### Sentry Dashboard
+
+Access Sentry dashboard at `https://sentry.io`:
+
+**Key Features:**
+- **Issues**: View and manage errors
+- **Performance**: Track slow transactions
+- **Alerts**: Configure notification rules
+- **Releases**: Track errors by version
+
+## Application Logging
+
+### Logging Configuration
+
+The backend uses Python's built-in `logging` module with structured logging.
+
+#### Setup Logger
+
+Create `/backend-meeting-notes/app/utils/logger.py`:
+
+```python
+import logging
+import sys
+from datetime import datetime
+
+def setup_logger(name: str = "gistly-backend") -> logging.Logger:
+    """Set up and configure logger."""
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+
+    # Prevent duplicate handlers
+    if logger.handlers:
+        return logger
+
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+
+    # Create formatter with timestamp
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    console_handler.setFormatter(formatter)
+
+    # Add handler to logger
+    logger.addHandler(console_handler)
+
+    return logger
+
+# Create logger instance
+logger = setup_logger()
+```
+
+#### Usage in Application
+
+```python
+from app.utils.logger import logger
+
+@app.route('/meetings/<meeting_id>')
+def get_meeting(meeting_id):
+    logger.info(f"Fetching meeting {meeting_id}")
+
+    try:
+        meeting = Meeting.query.get(meeting_id)
+        logger.debug(f"Found meeting: {meeting.m_title}")
+        return jsonify(meeting.to_dict())
+    except Exception as e:
+        logger.error(f"Error fetching meeting {meeting_id}: {str(e)}")
+        raise
+```
+
+### Log Levels
+
+Use appropriate log levels:
+
+| Level | Usage | Example |
+|-------|-------|---------|
+| DEBUG | Detailed diagnostic information | `logger.debug(f"Query result: {result}")` |
+| INFO | General informational messages | `logger.info(f"User {user_id} logged in")` |
+| WARNING | Something unexpected but not error | `logger.warning("Cache miss for key")` |
+| ERROR | Error occurred but app continues | `logger.error(f"Database error: {e}")` |
+| CRITICAL | Serious error, app may crash | `logger.critical("Cannot connect to database")` |
+
+### Structured Logging
+
+Use structured logging for better parsing:
+
+```python
+import json
+
+def log_structured(level, message, **kwargs):
+    """Log structured data."""
+    log_data = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "level": level,
+        "message": message,
+        **kwargs
+    }
+    logger.info(json.dumps(log_data))
+
+# Usage
+log_structured(
+    "info",
+    "Meeting processed",
+    meeting_id=meeting_id,
+    user_id=user_id,
+    duration_ms=duration,
+    success=True
+)
+```
+
+### Request Logging
+
+Log all HTTP requests:
+
+```python
+@app.before_request
+def log_request():
+    """Log incoming requests."""
+    logger.info(f"{request.method} {request.path} - {request.remote_addr}")
+
+@app.after_request
+def log_response(response):
+    """Log response status."""
+    logger.info(f"{request.method} {request.path} - {response.status_code}")
+    return response
+```
+
+### Database Query Logging
+
+Enable SQLAlchemy query logging in development:
+
+```python
+import logging
+
+if app.debug:
+    logging.basicConfig()
+    logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+```
+
+### Log Files
+
+Configure file logging in production:
+
+```python
+def setup_file_logger(app):
+    """Set up file logging for production."""
+    if app.config.get("FLASK_ENV") != "production":
+        return
+
+    # Create logs directory
+    log_dir = os.path.join(os.path.dirname(__file__), "..", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    # File handler for errors
+    error_handler = logging.FileHandler(
+        os.path.join(log_dir, "error.log")
+    )
+    error_handler.setLevel(logging.ERROR)
+
+    # File handler for all logs
+    file_handler = logging.FileHandler(
+        os.path.join(log_dir, "app.log")
+    )
+    file_handler.setLevel(logging.INFO)
+
+    # Add handlers
+    logger.addHandler(error_handler)
+    logger.addHandler(file_handler)
+```
+
+### Log Rotation
+
+Use `RotatingFileHandler` for log rotation:
+
+```python
+from logging.handlers import RotatingFileHandler
+
+# Rotate at 10MB, keep 5 backups
+handler = RotatingFileHandler(
+    "logs/app.log",
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5
+)
+logger.addHandler(handler)
+```
+
+## Performance Monitoring
+
+### Resource Monitoring
+
+The backend includes a custom resource monitor in `/backend-meeting-notes/app/utils/resource_monitor.py`:
+
+```python
+import psutil
+import logging
+
+logger = logging.getLogger(__name__)
+
+class ResourceMonitor:
+    """Monitor system resources."""
+
+    def __init__(self, memory_threshold=80, cpu_threshold=90):
+        self.memory_threshold = memory_threshold
+        self.cpu_threshold = cpu_threshold
+
+    def check_resources(self):
+        """Check current resource usage."""
+        memory = psutil.virtual_memory()
+        cpu = psutil.cpu_percent(interval=0.5)
+
+        memory_percent = memory.percent
+        cpu_percent = cpu
+
+        # Log warnings if thresholds exceeded
+        if memory_percent > self.memory_threshold:
+            logger.warning(f"High memory usage: {memory_percent}%")
+
+        if cpu_percent > self.cpu_threshold:
+            logger.warning(f"High CPU usage: {cpu_percent}%")
+
+        return {
+            "memory_percent": memory_percent,
+            "cpu_percent": cpu_percent,
+            "memory_available_mb": memory.available / (1024 * 1024)
+        }
+
+# Create singleton instance
+monitor = ResourceMonitor()
+```
+
+### Database Performance Monitoring
+
+#### Slow Query Logging
+
+Enable slow query logging in PostgreSQL:
+
+```sql
+ALTER DATABASE backend_database SET log_min_duration_statement = 1000;
+```
+
+This logs queries taking longer than 1 second.
+
+#### Query Analysis
+
+Use `EXPLAIN ANALYZE` to analyze slow queries:
+
+```python
+from sqlalchemy import text
+
+result = db.session.execute(text("""
+    EXPLAIN ANALYZE
+    SELECT * FROM meetings
+    WHERE m_user_id = :user_id
+    AND m_status = 'completed'
+"""), {"user_id": user_id})
+
+for row in result:
+    print(row[0])
+```
+
+### Application Performance
+
+#### Response Time Tracking
+
+Track endpoint performance:
+
+```python
+import time
+from functools import wraps
+
+def track_performance(f):
+    """Decorator to track function performance."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        start_time = time.time()
+        result = f(*args, **kwargs)
+        duration = (time.time() - start_time) * 1000  # Convert to ms
+
+        logger.info(f"{f.__name__} took {duration:.2f}ms")
+
+        # Slow endpoint warning
+        if duration > 1000:
+            logger.warning(f"Slow endpoint: {f.__name__} ({duration:.2f}ms)")
+
+        return result
+    return decorated_function
+
+# Usage
+@app.route('/meetings')
+@track_performance
+def get_meetings():
+    meetings = Meeting.query.all()
+    return jsonify([m.to_dict() for m in meetings])
+```
+
+#### Database Query Count
+
+Track number of queries per request:
+
+```python
+from flask import g
+
+@app.before_request
+def before_request():
+    g.query_count = 0
+
+@app.after_request
+def after_request(response):
+    query_count = g.get('query_count', 0)
+    logger.info(f"Queries executed: {query_count}")
+    return response
+
+# In SQLAlchemy queries
+from sqlalchemy import event
+
+@event.listens_for(db.engine, 'before_cursor_execute')
+def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    if hasattr(g, 'query_count'):
+        g.query_count += 1
+```
+
+### Cache Monitoring
+
+Track cache hit/miss ratios:
+
+```python
+from app.extensions import cache
+
+@app.before_request
+def track_cache():
+    """Track cache statistics."""
+    if cache:
+        stats = cache.get_stats()
+        logger.info(f"Cache hits: {stats.get('hits', 0)}, misses: {stats.get('misses', 0)}")
+```
+
+## Health Checks
+
+### Health Check Endpoint
+
+Implement comprehensive health checks:
+
+```python
+from flask import jsonify
+from datetime import datetime
+import time
+
+@app.route('/health')
+def health_check():
+    """Comprehensive health check endpoint."""
+    status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "checks": {}
+    }
+
+    # Check database
+    try:
+        db.session.execute(text('SELECT 1'))
+        status["checks"]["database"] = {
+            "status": "healthy",
+            "response_time_ms": check_db_response_time()
+        }
+    except Exception as e:
+        status["status"] = "unhealthy"
+        status["checks"]["database"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+
+    # Check Redis
+    try:
+        cache.ping()
+        status["checks"]["redis"] = {
+            "status": "healthy",
+            "response_time_ms": check_redis_response_time()
+        }
+    except Exception as e:
+        status["status"] = "unhealthy"
+        status["checks"]["redis"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+
+    # Check disk space
+    disk = psutil.disk_usage('/')
+    disk_percent = disk.percent
+    if disk_percent > 90:
+        status["checks"]["disk"] = {
+            "status": "warning",
+            "usage_percent": disk_percent
+        }
+    else:
+        status["checks"]["disk"] = {
+            "status": "healthy",
+            "usage_percent": disk_percent
+        }
+
+    # Return appropriate HTTP status
+    http_status = 200 if status["status"] == "healthy" else 503
+    return jsonify(status), http_status
+
+def check_db_response_time():
+    """Check database response time."""
+    start = time.time()
+    db.session.execute(text('SELECT 1'))
+    return (time.time() - start) * 1000
+
+def check_redis_response_time():
+    """Check Redis response time."""
+    start = time.time()
+    cache.ping()
+    return (time.time() - start) * 1000
+```
+
+### Health Check Response
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-08T12:00:00.000Z",
+  "checks": {
+    "database": {
+      "status": "healthy",
+      "response_time_ms": 5.23
+    },
+    "redis": {
+      "status": "healthy",
+      "response_time_ms": 1.45
+    },
+    "disk": {
+      "status": "healthy",
+      "usage_percent": 45.2
+    }
+  }
+}
+```
+
+### Load Balancer Health Checks
+
+Configure health check for AWS Application Load Balancer:
+
+- **Health Check Path**: `/health`
+- **Protocol**: HTTP
+- **Interval**: 30 seconds
+- **Timeout**: 5 seconds
+- **Healthy Threshold**: 2 consecutive successes
+- **Unhealthy Threshold**: 3 consecutive failures
+- **Success Codes**: 200
+
+### Readiness Probe
+
+For container orchestration (Kubernetes/ECS):
+
+```python
+@app.route('/ready')
+def readiness_check():
+    """Readiness check - is app ready to serve traffic?"""
+    # Check if database connection pool is ready
+    try:
+        db.session.execute(text('SELECT 1'))
+
+        # Check if cache is available
+        cache.ping()
+
+        return jsonify({"status": "ready"}), 200
+    except:
+        return jsonify({"status": "not_ready"}), 503
+```
+
+### Liveness Probe
+
+Check if application is running:
+
+```python
+@app.route('/live')
+def liveness_check():
+    """Liveness check - is app alive?"""
+    return jsonify({"status": "alive", "timestamp": datetime.utcnow().isoformat()}), 200
+```
+
+## Metrics and Alerting
+
+### Custom Metrics
+
+Track business metrics:
+
+```python
+from collections import defaultdict
+
+class MetricsCollector:
+    """Collect custom application metrics."""
+
+    def __init__(self):
+        self.counters = defaultdict(int)
+        self.timers = defaultdict(list)
+
+    def increment(self, metric_name, value=1):
+        """Increment a counter metric."""
+        self.counters[metric_name] += value
+
+    def timing(self, metric_name, duration_ms):
+        """Record a timing metric."""
+        self.timers[metric_name].append(duration_ms)
+
+    def get_metrics(self):
+        """Get all metrics."""
+        return {
+            "counters": dict(self.counters),
+            "timers": {
+                k: {
+                    "count": len(v),
+                    "avg": sum(v) / len(v) if v else 0,
+                    "max": max(v) if v else 0
+                }
+                for k, v in self.timers.items()
+            }
+        }
+
+# Global metrics collector
+metrics = MetricsCollector()
+
+# Usage in routes
+@app.route('/meetings', methods=['POST'])
+def create_meeting():
+    start = time.time()
+
+    # Create meeting logic
+    meeting = create_meeting_logic()
+
+    # Record metrics
+    metrics.increment("meetings.created")
+    metrics.timing("meetings.create_duration_ms", (time.time() - start) * 1000)
+
+    return jsonify(meeting.to_dict()), 201
+
+# Metrics endpoint
+@app.route('/metrics')
+def get_metrics():
+    """Return application metrics."""
+    return jsonify(metrics.get_metrics())
+```
+
+### Alerting
+
+Set up alerts for critical conditions:
+
+#### Sentry Alerts
+
+Configure in Sentry dashboard:
+1. Go to Settings → Alerts
+2. Create new alert rule
+3. Configure conditions (e.g., error rate > 5%)
+4. Set notification channels (email, Slack, PagerDuty)
+
+#### Custom Alerts
+
+```python
+def check_alerts():
+    """Check conditions and trigger alerts."""
+    # Check error rate
+    if metrics.counters.get("errors", 0) > 100:
+        send_alert(f"High error rate: {metrics.counters['errors']} errors/min")
+
+    # Check response time
+    avg_response_time = metrics.timers.get("response_time_ms", {})
+    if avg_response_time.get("avg", 0) > 1000:
+        send_alert(f"Slow response time: {avg_response_time['avg']:.2f}ms")
+
+    # Check database connections
+    if db.pool.checkedout() > db.pool.size() * 0.9:
+        send_alert("Database pool nearly exhausted")
+
+def send_alert(message):
+    """Send alert notification."""
+    logger.error(f"ALERT: {message}")
+    # Send to Slack, email, etc.
+```
+
+## Monitoring Dashboard
+
+### Recommended Tools
+
+1. **Sentry**: Error tracking and performance monitoring
+2. **Grafana**: Custom dashboards for metrics
+3. **Prometheus**: Metrics collection and storage
+4. **CloudWatch**: AWS-native monitoring
+
+### Example Grafana Dashboard
+
+Monitor key metrics:
+- Request rate and response time
+- Error rate by endpoint
+- Database connection pool usage
+- Cache hit/miss ratio
+- System resources (CPU, memory, disk)
+- Business metrics (meetings processed, etc.)
+
+## Best Practices
+
+### 1. Logging
+
+- **Use appropriate log levels**: DEBUG, INFO, WARNING, ERROR
+- **Structure your logs**: Use JSON format for easy parsing
+- **Include context**: Add request IDs, user IDs, etc.
+- **Avoid sensitive data**: Don't log passwords, tokens, etc.
+- **Rotate logs**: Prevent disk space issues
+
+### 2. Error Tracking
+
+- **Capture context**: Include user info, request details
+- **Filter sensitive data**: Remove passwords, tokens
+- **Set up alerts**: Notify for critical errors
+- **Track releases**: Monitor errors by deployment
+- **Review regularly**: Check Sentry dashboard daily
+
+### 3. Performance Monitoring
+
+- **Track response times**: Identify slow endpoints
+- **Monitor database queries**: Find optimization opportunities
+- **Watch resource usage**: CPU, memory, disk
+- **Set up alerts**: Notify on degradation
+- **Baseline performance**: Know what's normal
+
+### 4. Health Checks
+
+- **Check dependencies**: Database, Redis, external APIs
+- **Return proper status**: 200 for healthy, 503 for unhealthy
+- **Keep it fast**: Health check should be quick
+- **Log failures**: Track health check failures
+- **Load balancer integration**: Use for auto-scaling
+
+## Troubleshooting
+
+### High Error Rate
+
+**Diagnosis**:
+1. Check Sentry for error patterns
+2. Review application logs
+3. Check database connectivity
+4. Verify external API status
+
+**Solutions**:
+1. Fix root cause of errors
+2. Implement circuit breakers for external APIs
+3. Add retry logic for transient failures
+4. Scale infrastructure if needed
+
+### Slow Response Times
+
+**Diagnosis**:
+1. Check performance monitoring data
+2. Review slow query logs
+3. Analyze endpoint duration
+4. Check resource utilization
+
+**Solutions**:
+1. Optimize slow database queries
+2. Add caching for expensive operations
+3. Implement database indexes
+4. Scale horizontally (add instances)
+
+### Database Connection Exhaustion
+
+**Diagnosis**:
+1. Check connection pool usage
+2. Review application logs
+3. Monitor database connections
+
+**Solutions**:
+1. Increase connection pool size
+2. Fix connection leaks (unclosed sessions)
+3. Reduce long-running queries
+4. Implement connection recycling
+
+### Out of Memory
+
+**Diagnosis**:
+1. Check memory usage graphs
+2. Review application logs
+3. Monitor memory leaks
+
+**Solutions**:
+1. Fix memory leaks (unclosed connections, large objects)
+2. Implement memory caching strategies
+3. Increase instance memory
+4. Implement request queuing
+
+### Disk Space Full
+
+**Diagnosis**:
+1. Check disk usage
+2. Review log file sizes
+3. Check database size
+
+**Solutions**:
+1. Rotate and compress logs
+2. Clean up old log files
+3. Archive old database records
+4. Increase disk size

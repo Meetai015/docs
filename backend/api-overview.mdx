@@ -1,0 +1,605 @@
+---
+title: API Overview
+description: Overview of the Gistly backend API
+icon: api
+---
+
+# API Overview
+
+The Gistly backend is built on **Flask** and provides a RESTful API for managing meeting analytics, user authentication, organizations, teams, and more. This document provides a comprehensive overview of the API architecture, authentication, and available endpoints.
+
+## Base URL
+
+All API endpoints are prefixed with the following base URL:
+
+```
+https://api.gistly.ai
+```
+
+### API Versioning
+
+The API uses URL-based versioning. Currently, the API is at version 1:
+
+```
+/api/v1/
+```
+
+Some newer features may use `/api/v2/` for updated endpoints. For example:
+- Reports V2: `/api/v2/reports/*`
+- Knowledgebase: `/api/knowledgebase/*`
+- Products: `/api/products/*`
+- Nira Finance: `/api/nira/*`
+
+## Architecture
+
+### Technology Stack
+
+- **Framework**: Flask
+- **Database**: PostgreSQL with SQLAlchemy ORM
+- **Authentication**: Flask-JWT-Extended (JWT tokens)
+- **CORS**: Flask-Cors for cross-origin requests
+- **Cache**: Redis (optional, configurable)
+
+### Request Flow
+
+```
+Client Request
+    ↓
+CORS Headers
+    ↓
+JWT Authentication (via auth_jwt middleware)
+    ↓
+Authorization Check (RBAC middleware)
+    ↓
+Route Handler
+    ↓
+Response
+```
+
+## Authentication
+
+### JWT-Based Authentication
+
+The Gistly API uses **JSON Web Tokens (JWT)** for authentication, implemented via `Flask-JWT-Extended`.
+
+#### Token Configuration
+
+| Configuration | Value |
+|--------------|-------|
+| Secret Key | Configured via `JWT_SECRET_KEY` |
+| Token Expiry | 7 days |
+| Token Location | HTTP Headers (`Authorization`) |
+| Header Type | `Bearer` |
+
+#### Obtaining a Token
+
+There are multiple ways to authenticate:
+
+**1. Email/Password Login**
+
+```bash
+POST /auth/login
+Content-Type: application/json
+
+{
+  "u_email": "user@example.com",
+  "u_password": "password123"
+}
+```
+
+**Response:**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "u_id": "uuid-here",
+    "u_email": "user@example.com",
+    "u_first_name": "John",
+    "u_last_name": "Doe"
+  }
+}
+```
+
+**2. Google OAuth**
+
+```bash
+POST /auth/google
+Content-Type: application/json
+
+{
+  "id_token": "google-oauth-id-token"
+}
+```
+
+**3. Email Verification (for new users)**
+
+```bash
+# Start verification
+POST /auth/email_verification/start
+{
+  "u_email": "user@example.com"
+}
+
+# Verify with OTP
+POST /auth/email_verification/verify
+{
+  "u_email": "user@example.com",
+  "otp": "123456"
+}
+```
+
+#### Using the Token
+
+Include the JWT token in the `Authorization` header:
+
+```bash
+GET /api/v1/meetings
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+#### API Key Authentication
+
+For service-to-service authentication, you can use API keys:
+
+```bash
+GET /api/v1/meetings
+X-API-Key: your-api-key-here
+```
+
+API keys are validated against the database and associated with organizations.
+
+### Exempt Routes
+
+The following routes do not require authentication:
+
+- `/auth/google` - Google OAuth
+- `/auth/login` - User login
+- `/auth/signup` - User registration
+- `/auth/reset_password/*` - Password reset flow
+- `/auth/email_verification/*` - Email verification
+- `/integration/nango/webhook` - Nango webhooks
+- `/meetings/shared/<meeting_id>` - Shared meeting access
+- Various webhook endpoints for integrations
+
+## Response Format
+
+### Success Response
+
+All successful responses follow this structure:
+
+```json
+{
+  "data": { ... },
+  "message": "Success message",
+  "status": 200
+}
+```
+
+### Error Response
+
+Error responses use standard HTTP status codes:
+
+```json
+{
+  "error": "Error message",
+  "message": "Detailed error description",
+  "status": 400
+}
+```
+
+### Common HTTP Status Codes
+
+| Status Code | Meaning |
+|-------------|---------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request |
+| 401 | Unauthorized (invalid/missing token) |
+| 403 | Forbidden (insufficient permissions) |
+| 404 | Not Found |
+| 422 | Unprocessable Entity (invalid token format) |
+| 500 | Internal Server Error |
+
+## Rate Limiting
+
+The API implements rate limiting to prevent abuse:
+
+- **Default Limit**: Configured per endpoint
+- **Headers**: Rate limit info is included in response headers
+- **Strategy**: Token-based rate limiting
+
+Example rate limit headers:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1640995200
+```
+
+## CORS Configuration
+
+The API supports CORS for the following origins:
+
+- `http://localhost:3000` (development)
+- `https://console.gistly.ai` (production)
+- `https://console-staging.gistly.ai` (staging)
+- `https://staging-console.gistly.ai` (staging)
+- `https://staging-app.gistly.ai` (staging)
+
+CORS headers:
+- `Access-Control-Allow-Credentials: true`
+- `Access-Control-Allow-Headers: Content-Type,Authorization`
+- `Access-Control-Allow-Methods: GET,PUT,POST,DELETE,OPTIONS`
+
+## Endpoint Categories
+
+### 1. Authentication Endpoints
+
+Manage user authentication and authorization.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth/login` | POST | Login with email/password |
+| `/auth/signup` | POST | Register new user |
+| `/auth/google` | POST | Authenticate with Google OAuth |
+| `/auth/email_verification/start` | POST | Start email verification |
+| `/auth/email_verification/verify` | POST | Verify email with OTP |
+| `/auth/email_verification/resend` | POST | Resend verification OTP |
+| `/auth/reset_password/start` | POST | Start password reset |
+| `/auth/reset_password/verify` | POST | Verify reset OTP |
+| `/auth/reset_password/change` | POST | Change password |
+| `/auth/reset_password/resend` | POST | Resend reset OTP |
+
+### 2. User Management Endpoints
+
+Manage user profiles and settings.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/user/profile-info` | GET | Get user profile |
+| `/users/add` | POST | Add user to organization |
+| `/users/bulk-add` | POST | Bulk add users |
+| `/users/<user_id>` | PUT | Update user |
+| `/users/<user_id>` | DELETE | Delete user |
+| `/users/<user_id>/activate` | POST | Activate user |
+| `/users/<user_id>/inactivate` | POST | Inactivate user |
+| `/users/agents` | GET | Get all agents |
+| `/users/inactive` | GET | Get inactive users |
+| `/users/<user_id>/voice-sample` | POST | Upload voice sample |
+| `/users/<user_id>/voice-sample` | DELETE | Delete voice sample |
+
+### 3. Meeting Endpoints
+
+Core functionality for managing meetings and recordings.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/meetings/add-meetings` | POST | Add new meetings |
+| `/meetings/meeting/add` | POST | Add single meeting |
+| `/meetings` | GET | List all meetings |
+| `/meetings/<meeting_id>` | GET | Get meeting details |
+| `/meetings/<meeting_id>` | DELETE | Delete meeting |
+| `/meetings/today` | GET | Get today's meetings |
+| `/meetings/<meeting_id>/status` | GET | Get meeting status |
+| `/meetings/<meeting_id>/share` | POST | Share meeting |
+| `/meetings/shared/<meeting_id>` | GET | Get shared meeting |
+| `/meetings/upload` | POST | Upload audio file |
+| `/meetings/upload-csv` | POST | Bulk upload from CSV |
+| `/meetings/8x8` | POST | Handle 8x8 integration |
+| `/meetings/pw-webhook` | POST | Pingway webhook |
+| `/meetings/talk-ratio` | GET | Get talk/listen ratio |
+
+### 4. Organization Endpoints
+
+Manage organizations and workspaces.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/organisations` | GET | List organizations |
+| `/organisations` | POST | Create organization |
+| `/organisations/update/details` | POST | Update organization |
+| `/organisations/choose-workspace` | POST | Select workspace |
+| `/organisations/join-request` | POST | Create join request |
+| `/organisations/join-requests` | GET | List join requests |
+| `/organisations/join-request/<id>` | PUT | Update join request |
+| `/organisations/domain/<domain>` | GET | Get organizations by domain |
+| `/organisations/lambda-token` | POST | Create Lambda access token |
+
+### 5. Team Endpoints
+
+Manage teams within organizations.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/teams` | GET | List teams |
+| `/teams` | POST | Create team |
+| `/teams/<team_id>` | GET | Get team details |
+| `/teams/<team_id>` | PUT | Update team |
+| `/teams/<team_id>` | DELETE | Delete team |
+| `/teams/<team_id>/assign` | POST | Assign users to team |
+| `/teams/<team_id>/users` | DELETE | Remove users from team |
+| `/teams/<team_id>/manager` | POST | Promote to manager |
+| `/teams/<team_id>/manager` | DELETE | Demote manager |
+| `/teams/users-to-add` | GET | Get users available to add |
+
+### 6. Role & Permission Endpoints
+
+Manage roles and permissions for RBAC.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/roles` | GET | List roles |
+| `/roles` | POST | Create role |
+| `/roles/<role_id>` | GET | Get role details |
+| `/roles/<role_id>` | PUT | Update role |
+| `/roles/<role_id>` | DELETE | Delete role |
+| `/roles/<role_id>/permissions` | GET | Get role permissions |
+| `/roles/<role_id>/permissions` | PUT | Update permissions |
+| `/roles/<role_id>/assign` | POST | Assign role to user |
+| `/roles/<role_id>/remove` | DELETE | Remove role from user |
+| `/roles/user/<user_id>` | GET | Get user role |
+
+### 7. Red Flags Endpoints
+
+Manage red flags for compliance and quality monitoring.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/red-flags` | GET | List red flags |
+| `/api/red-flags` | POST | Create red flag |
+| `/api/red-flags/<flag_id>` | GET | Get red flag details |
+| `/api/red-flags/<flag_id>` | PUT | Update red flag |
+| `/api/red-flags/<flag_id>` | DELETE | Delete red flag |
+| `/api/red-flags/<flag_id>/activate` | POST | Activate red flag |
+| `/api/red-flags/<flag_id>/deactivate` | POST | Deactivate red flag |
+
+### 8. Object System Endpoints
+
+Custom object system for flexible data management.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/objects` | GET | List objects |
+| `/objects` | POST | Create object |
+| `/objects/<object_id>` | GET | Get object details |
+| `/objects/<object_id>` | PUT | Update object |
+| `/objects/<object_id>` | DELETE | Delete object |
+| `/objects/<object_id>/activate` | POST | Activate object |
+| `/objects/<object_id>/deactivate` | POST | Deactivate object |
+| `/objects/<object_id>/attributes` | GET | List attributes |
+| `/objects/<object_id>/attributes` | POST | Create attribute |
+| `/attributes/<attribute_id>` | DELETE | Delete attribute |
+| `/records` | GET | List records |
+| `/records` | POST | Create record |
+| `/records/<record_id>` | GET | Get record |
+| `/records/<record_id>` | PUT | Update record |
+| `/records/<record_id>` | DELETE | Soft delete record |
+| `/records/<record_id>/meetings` | GET | Get record meetings |
+| `/records/export` | POST | Export records |
+| `/records/export-email` | POST | Export and email records |
+| `/lists` | GET | List lists |
+| `/lists` | POST | Create list |
+| `/lists/<list_id>` | GET | Get list details |
+| `/lists/<list_id>` | DELETE | Delete list |
+| `/lists/<list_id>/entries` | POST | Add entries |
+| `/lists/<list_id>/entries/<entry_id>` | DELETE | Remove entry |
+| `/views` | GET | List views |
+| `/views` | POST | Create view |
+| `/views/<view_id>` | GET | Get view details |
+| `/views/<view_id>` | DELETE | Delete view |
+| `/relationships` | POST | Create relationship |
+| `/relationships/<relationship_id>` | DELETE | Delete relationship |
+
+### 9. Reports & Dashboards Endpoints
+
+Generate reports and manage dashboards.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/reports/generate` | POST | Generate report |
+| `/reports/<report_id>` | GET | Get report |
+| `/reports/<report_id>` | DELETE | Delete report |
+| `/api/v2/reports/*` | VAR | Reports V2 endpoints |
+| `/dashboards` | GET | List dashboards |
+| `/dashboards` | POST | Create dashboard |
+| `/dashboards/<dashboard_id>` | GET | Get dashboard |
+| `/dashboards/<dashboard_id>` | PUT | Update dashboard |
+| `/dashboards/<dashboard_id>` | DELETE | Delete dashboard |
+| `/dashboards/<dashboard_id>/favorite` | POST | Toggle favorite |
+| `/dashboards/templates` | GET | List templates |
+| `/dashboards/templates/<template_id>` | GET | Get template |
+| `/dashboards/from-template` | POST | Create from template |
+
+### 10. Tickets Endpoints
+
+Manage support tickets and related operations.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/tickets` | GET | List tickets |
+| `/api/tickets` | POST | Create ticket |
+| `/api/tickets/<ticket_id>` | GET | Get ticket |
+| `/api/tickets/<ticket_id>` | PUT | Update ticket |
+| `/api/tickets/<ticket_id>` | DELETE | Delete ticket |
+| `/api/tickets/<ticket_id>/resolve` | POST | Resolve ticket |
+| `/api/tickets/<ticket_id>/messages` | GET | List messages |
+| `/api/tickets/<ticket_id>/messages` | POST | Add message |
+| `/api/tickets/<ticket_id>/timeline` | GET | Get timeline |
+| `/api/tickets/<ticket_id>/red-flags` | GET | Get red flags |
+| `/api/tickets/<ticket_id>/sop-violations` | GET | Get SOP violations |
+| `/api/tickets/<ticket_id>/sla-details` | GET | Get SLA details |
+| `/api/tickets/<ticket_id>/compliance` | GET | Get compliance summary |
+| `/api/tickets/<ticket_id>/link-meeting` | POST | Link to meeting |
+| `/api/tickets/<ticket_id>/link-email-thread` | POST | Link to email thread |
+| `/api/tickets/<ticket_id>/link-email-message` | POST | Link to email message |
+| `/api/tickets/<ticket_id>/link-chat` | POST | Link to chat |
+| `/api/tickets/process-batch` | POST | Submit batch processing job |
+
+## Additional Features
+
+### RBAC (Role-Based Access Control)
+
+The API implements comprehensive RBAC through middleware:
+
+1. **Authentication Check**: Validates JWT/API key
+2. **Permission Loading**: Loads user permissions based on role
+3. **Authorization Check**: Verifies access to specific endpoints
+
+Permission categories include:
+- Meeting management
+- User management
+- Team management
+- Organization management
+- Report generation
+- Red flag management
+- Ticket management
+
+### Error Handling
+
+The API uses a centralized error handling approach:
+
+```python
+# Example error response structure
+{
+  "error": "Error type",
+  "message": "Detailed error message",
+  "status": 400,
+  "traceback": "..."  # Only in development
+}
+```
+
+Common error scenarios:
+- Missing/invalid authentication token
+- Insufficient permissions
+- Resource not found
+- Validation errors
+- Database errors
+- External service failures
+
+### Webhooks
+
+The API supports webhooks for various integrations:
+
+- **Nango Integration**: `/integration/nango/webhook`
+- **8x8 Integration**: `/meetings/8x8`
+- **Pingway**: `/meetings/pw-webhook`
+- **Freshdesk**: `/freshdesk/*`
+- **Upgrad**: `/meetings/upgrad-webhook`
+
+### File Upload
+
+The API supports various file upload methods:
+
+1. **Direct Upload**: Upload audio/video files
+2. **CSV Upload**: Bulk upload meetings from CSV
+3. **S3 Integration**: Direct S3 uploads with presigned URLs
+
+Supported formats:
+- Audio: MP3, WAV, M4A
+- Video: MP4, MOV
+- Documents: CSV
+
+### Database
+
+- **ORM**: SQLAlchemy
+- **Pool Size**: 50 connections (production)
+- **Max Overflow**: 20 connections
+- **Pool Timeout**: 30 seconds
+- **Connection Recycling**: 30 minutes
+- **Query Timeout**: 3 minutes
+- **SSL**: Required in production
+
+## Best Practices
+
+### 1. Token Management
+
+- Store tokens securely (e.g., httpOnly cookies or secure storage)
+- Refresh tokens before expiry
+- Implement token revocation on logout
+- Use different tokens for different sessions
+
+### 2. Error Handling
+
+- Always check HTTP status codes
+- Parse error messages from response
+- Implement retry logic with exponential backoff
+- Log errors for debugging
+
+### 3. Rate Limiting
+
+- Implement client-side rate limiting
+- Use pagination for large datasets
+- Cache frequently accessed data
+- Use batch operations when available
+
+### 4. Security
+
+- Never expose tokens in client-side code
+- Use HTTPS in production
+- Validate all input data
+- Implement CSRF protection
+
+### 5. Performance
+
+- Use compression for large payloads
+- Implement request batching
+- Use WebSocket for real-time updates
+- Optimize database queries
+
+## Testing
+
+### Example Request with cURL
+
+```bash
+# Login to get token
+curl -X POST https://api.gistly.ai/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "u_email": "user@example.com",
+    "u_password": "password123"
+  }'
+
+# Use token to access protected endpoint
+curl -X GET https://api.gistly.ai/meetings \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+### Example Request with Python
+
+```python
+import requests
+
+# Login
+response = requests.post('https://api.gistly.ai/auth/login', json={
+    'u_email': 'user@example.com',
+    'u_password': 'password123'
+})
+token = response.json()['access_token']
+
+# Access protected endpoint
+headers = {'Authorization': f'Bearer {token}'}
+response = requests.get('https://api.gistly.ai/meetings', headers=headers)
+print(response.json())
+```
+
+## Support
+
+For API-related issues or questions:
+
+- **Documentation**: [docs.gistly.ai](https://docs.gistly.ai)
+- **Support Email**: support@gistly.ai
+- **Status Page**: [status.gistly.ai](https://status.gistly.ai)
+
+## Changelog
+
+### Version 1.0.0
+- Initial API release
+- JWT authentication
+- Core meeting management
+- Organization and team management
+- RBAC implementation
+- Red flags system
+- Object system
+- Reports and dashboards
+- Tickets management

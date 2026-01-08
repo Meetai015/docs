@@ -1,0 +1,179 @@
+---
+title: "Architecture"
+description: "Technical architecture of the Gistly Call Analytics platform"
+icon: "layers"
+---
+
+# System Architecture
+
+## High-Level Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Users                                │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Frontend (Next.js)                        │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────┐│
+│  │ Dashboard   │ │ Reports     │ │ Admin Panel             ││
+│  └─────────────┘ └─────────────┘ └─────────────────────────┘│
+└────────────────────────┬────────────────────────────────────┘
+                         │ REST API
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Backend (Django)                           │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────┐│
+│  │ API Layer   │ │ Business    │ │ Data Processing         ││
+│  │             │ │ Logic       │ │                         ││
+│  └─────────────┘ └─────────────┘ └─────────────────────────┘│
+└─────────────────┬───────────────────┬────────────────────────┘
+                  │                   │
+        ┌─────────▼─────────┐ ┌──────▼──────────┐
+        │  PostgreSQL DB    │ │   External APIs │
+        │                   │ │                 │
+        │ - Meetings        │ │ - OpenAI        │
+        │ - Transcripts     │ │ - Attio CRM     │
+        │ - Red Flags       │ │ - Webhooks      │
+        │ - Leads           │ │                 │
+        └───────────────────┘ └─────────────────┘
+```
+
+## Frontend Architecture
+
+### Technology Stack
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **UI Components**: shadcn/ui (Radix UI + Tailwind CSS)
+- **State Management**: React hooks + Server components
+- **Forms**: React Hook Form + Zod validation
+- **HTTP Client**: Custom fetch wrapper
+
+### Directory Structure
+```
+meeting-notes-dashboard/
+├── src/
+│   ├── app/              # Next.js app router pages
+│   ├── components/       # Reusable UI components
+│   │   ├── ui/          # shadcn/ui components
+│   │   ├── forms/       # Form components
+│   │   └── layouts/     # Layout components
+│   ├── lib/             # Utilities and helpers
+│   └── types/           # TypeScript type definitions
+├── public/              # Static assets
+└── tests/               # Test files
+```
+
+### Key Patterns
+- **Server Components** - Data fetching on the server
+- **Client Components** - Interactive UI elements
+- **Route Handlers** - API routes for backend proxy
+- **Middleware** - Authentication and request handling
+
+## Backend Architecture
+
+### Technology Stack
+- **Framework**: Django 5.x
+- **API**: Django REST Framework
+- **Database**: PostgreSQL
+- **Task Queue**: Celery + Redis
+- **Authentication**: JWT tokens
+
+### Directory Structure
+```
+backend-meeting-notes/
+├── app/
+│   ├── api/             # API endpoints
+│   │   ├── views/       # View functions
+│   │   ├── serializers/ # DRF serializers
+│   │   └── urls/        # URL routing
+│   ├── core/            # Core business logic
+│   │   ├── models/      # Database models
+│   │   ├── services/    # Business services
+│   │   └── permissions/ # Access control
+│   ├── integrations/    # External integrations
+│   │   ├── openai/      # AI processing
+│   │   ├── attio/       # CRM integration
+│   │   └── webhooks/    # Webhook handling
+│   └── processing/      # Background tasks
+│       ├── tasks/       # Celery tasks
+│       └── processors/  # Meeting processors
+├── migrations/          # DB migrations
+└── tests/               # Test files
+```
+
+### API Design
+- **RESTful endpoints** - Standard HTTP methods
+- **Versioned URLs** - `/api/v1/...`
+- **Pagination** - Page-based for lists
+- **Filtering** - Query parameter filters
+- **Sorting** - Configurable sort orders
+
+## Data Flow
+
+### Meeting Processing Flow
+```
+1. Meeting Ends (Webhook)
+        ↓
+2. Backend receives notification
+        ↓
+3. Fetch recording + transcript
+        ↓
+4. Queue for processing (Celery)
+        ↓
+5. AI Analysis (OpenAI)
+        ↓
+6. Store results in DB
+        ↓
+7. Trigger webhook notifications
+        ↓
+8. Frontend updates (polling/real-time)
+```
+
+### Lead Creation Flow
+```
+1. Meeting Analysis Complete
+        ↓
+2. Lead Processor checks criteria
+        ↓
+3. Extract attributes from conversation
+        ↓
+4. Create lead in database
+        ↓
+5. Sync to Attio (if configured)
+        ↓
+6. Update meeting record
+```
+
+## Deployment Architecture
+
+### AWS Infrastructure
+```
+┌─────────────────────────────────────────────────┐
+│              AWS Cloud                          │
+│  ┌───────────────────────────────────────────┐ │
+│  │        Load Balancer (ALB)                │ │
+│  └─────────────┬─────────────────────────────┘ │
+│                │                                 │
+│    ┌───────────┴───────────┐                     │
+│    ▼                       ▼                     │
+│ ┌────────┐          ┌─────────────┐              │
+│ │ Front  │          │ Backend     │              │
+│ │ (EC2)  │          │ (EC2/EC2)   │              │
+│ └────────┘          └─────────────┘              │
+│                             │                     │
+│                    ┌────────┴────────┐           │
+│                    ▼                 ▼           │
+│              ┌─────────┐      ┌──────────┐      │
+│              │ RDS     │      │ ElastiCache│     │
+│              │ (PostgreSQL)│   │ (Redis)   │      │
+│              └─────────┘      └──────────┘      │
+└─────────────────────────────────────────────────┘
+```
+
+### CI/CD Pipeline
+- **GitHub Actions** - Automated workflows
+- **Staging** - Test environment for validation
+- **Production** - Live environment with blue-green deployment
+- **Monitoring** - Sentry for error tracking

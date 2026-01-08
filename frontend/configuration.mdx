@@ -1,0 +1,236 @@
+---
+title: "Frontend Configuration"
+description: "Configure the Gistly Call Analytics frontend"
+icon: "settings"
+---
+
+# Frontend Configuration
+
+## Next.js Configuration
+
+The main Next.js configuration is in `next.config.js`:
+
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Environment variables exposed to the browser
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  },
+
+  // Image optimization
+  images: {
+    domains: ['your-cdn-domain.com'],
+  },
+
+  // Rewrites for API proxy (optional)
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${process.env.NEXT_PUBLIC_API_URL}/:path*`,
+      },
+    ];
+  },
+};
+```
+
+## Tailwind CSS Configuration
+
+Located in `tailwind.config.js`:
+
+```javascript
+module.exports = {
+  darkMode: ['class'],
+  content: ['./src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+      },
+      borderRadius: {
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+    },
+  },
+  plugins: [require('tailwindcss-animate')],
+};
+```
+
+## TypeScript Configuration
+
+The `tsconfig.json` includes:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+```
+
+## shadcn/ui Configuration
+
+The `components.json` configures shadcn/ui:
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "default",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.js",
+    "css": "src/app/globals.css",
+    "baseColor": "slate",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils"
+  }
+}
+```
+
+## Environment Variables
+
+### Required Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_API_URL` | Backend API base URL | `http://localhost:8000/api/v1` |
+
+### Optional Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_SENTRY_DSN` | Sentry error tracking DSN | `https://...@sentry.io/...` |
+| `NEXT_PUBLIC_ENABLE_ANALYTICS` | Enable analytics tracking | `true` |
+
+## API Client Configuration
+
+The API client in `src/lib/api.ts` can be customized:
+
+```typescript
+const apiClient = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add auth token to requests
+apiClient.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+```
+
+## Authentication Configuration
+
+Configure authentication in `src/lib/auth.ts`:
+
+```typescript
+export const authConfig = {
+  // Session duration in seconds
+  sessionMaxAge: 60 * 60 * 24 * 7, // 1 week
+
+  // Redirect paths
+  loginPath: '/login',
+  dashboardPath: '/dashboard',
+
+  // Protected routes
+  protectedRoutes: ['/dashboard', '/reports', '/admin'],
+};
+```
+
+## Styling Configuration
+
+### CSS Variables
+
+Global CSS variables are defined in `src/app/globals.css`:
+
+```css
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* ... more variables */
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    /* ... dark mode variables */
+  }
+}
+```
+
+## Build Configuration
+
+### Production Build
+
+```bash
+npm run build
+```
+
+### Build Output
+
+The build output is in `.next/` directory. For deployment:
+
+```bash
+npm run start
+```
+
+### Static Export (Optional)
+
+For static hosting, configure in `next.config.js`:
+
+```javascript
+module.exports = {
+  output: 'export',
+};
+```
+
+## Next Steps
+
+- Learn about [Components](/frontend/components)
+- Understand [State Management](/frontend/state-management)
+- Configure [Deployment](/frontend/deployment)

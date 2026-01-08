@@ -1,0 +1,411 @@
+---
+title: "Contributing"
+description: "Learn how to contribute to Gistly Call Analytics"
+icon: "users"
+---
+
+Thank you for your interest in contributing to Gistly Call Analytics! This guide will help you understand the contribution process and standards.
+
+## Getting Started
+
+### Prerequisites
+
+Before contributing, ensure you have:
+
+- Python 3.11+ installed (for backend development)
+- Node.js 19+ installed (for frontend development)
+- PostgreSQL 14+ installed and running
+- Git installed and configured
+- A GitHub account
+
+### Setting Up Your Development Environment
+
+<Steps>
+<Step title="Fork and Clone">
+
+1. Fork the repository on GitHub
+2. Clone your fork locally:
+```bash
+git clone https://github.com/your-username/gistly-call-analytics.git
+cd gistly-call-analytics
+```
+
+</Step>
+
+<Step title="Backend Setup">
+
+Navigate to the backend directory:
+
+```bash
+cd backend-meeting-notes
+```
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv backend-env
+source backend-env/bin/activate  # On Windows: backend-env\Scripts\activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Set up the database:
+
+```bash
+createdb test_backend_database
+```
+
+Configure environment variables (create `.env`):
+
+```bash
+FLASK_APP=run.py
+FLASK_ENV=development
+DATABASE_URL=postgresql://user:password@localhost:5432/gistly_db
+JWT_SECRET_KEY=your-secret-key
+```
+
+Install pre-commit hooks:
+
+```bash
+pre-commit install
+```
+
+</Step>
+
+<Step title="Frontend Setup">
+
+Navigate to the frontend directory in a new terminal:
+
+```bash
+cd meeting-notes-dashboard
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create `.env.local`:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:5000
+```
+
+</Step>
+</Steps>
+
+## Contribution Workflow
+
+### 1. Create a Branch
+
+Always create a branch for your work:
+
+```bash
+git checkout -b feature/your-feature-name
+# or
+git checkout -b fix/bug-description
+```
+
+Branch naming conventions:
+- `feature/` - New features
+- `fix/` - Bug fixes
+- `refactor/` - Code refactoring
+- `docs/` - Documentation changes
+- `test/` - Test additions or updates
+
+### 2. Make Your Changes
+
+Follow the code style guidelines outlined in our [Code Style](/development/code-style) documentation.
+
+### 3. Run Tests
+
+Before committing, ensure all tests pass:
+
+**Backend:**
+
+```bash
+cd backend-meeting-notes
+python -m pytest tests/
+```
+
+**Frontend:**
+
+```bash
+cd meeting-notes-dashboard
+npm test
+```
+
+### 4. Run Linters
+
+Our pre-commit hooks will automatically run linters, but you can run them manually:
+
+**Backend:**
+
+```bash
+cd backend-meeting-notes
+black .           # Format code
+ruff check .      # Lint code
+```
+
+**Frontend:**
+
+```bash
+cd meeting-notes-dashboard
+npm run lint
+```
+
+### 5. Commit Your Changes
+
+Use clear, descriptive commit messages following our conventions (see below).
+
+```bash
+git add .
+git commit -m "feat: add user authentication"
+```
+
+### 6. Push and Create Pull Request
+
+```bash
+git push origin feature/your-feature-name
+```
+
+Then create a pull request on GitHub following our PR guidelines.
+
+## Commit Message Conventions
+
+We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+### Format
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer]
+```
+
+### Types
+
+- `feat` - A new feature
+- `fix` - A bug fix
+- `docs` - Documentation only changes
+- `style` - Changes that don't affect code meaning (formatting, etc.)
+- `refactor` - Code change that neither fixes a bug nor adds a feature
+- `perf` - Performance improvement
+- `test` - Adding or updating tests
+- `chore` - Changes to build process or auxiliary tools
+- `ci` - CI/CD changes
+
+### Examples
+
+```bash
+feat(auth): add OAuth2 login support
+
+Add support for Google and GitHub OAuth2 authentication.
+Implements user profile creation on first login.
+
+Closes #123
+```
+
+```bash
+fix(api): resolve race condition in meeting updates
+
+The race condition occurred when multiple users updated
+the same meeting simultaneously. Fixed with database locks.
+
+Fixes #456
+```
+
+```bash
+refactor(database): optimize query performance
+
+Reduce N+1 queries by using SQLAlchemy eager loading.
+Improves response time by 40%.
+```
+
+## Pull Request Guidelines
+
+### PR Title
+
+Use the same format as commit messages:
+
+```
+feat: add user authentication
+fix: resolve race condition
+docs: update API documentation
+```
+
+### PR Description
+
+Include:
+
+1. **Summary**: Brief description of changes
+2. **Motivation**: Why this change is needed
+3. **Changes**: What was changed
+4. **Screenshots**: For UI changes (if applicable)
+5. **Testing**: How you tested the changes
+6. **Related Issues**: Link to related issues
+
+### Template
+
+```markdown
+## Summary
+Brief description of what this PR does.
+
+## Changes
+- Change 1
+- Change 2
+- Change 3
+
+## Testing
+- [ ] Unit tests pass
+- [ ] Integration tests pass
+- [ ] Manual testing completed
+- [ ] Browser testing completed (for frontend changes)
+
+## Checklist
+- [ ] Code follows style guidelines
+- [ ] Self-review completed
+- [ ] Documentation updated
+- [ ] No new warnings generated
+- [ ] Tests added/updated
+- [ ] All tests passing
+
+## Related Issues
+Closes #123
+Related to #456
+```
+
+## Code Review Process
+
+### Review Workflow
+
+1. **Automated Checks**: CI/CD pipeline runs tests and linters
+2. **Peer Review**: At least one maintainer reviews your PR
+3. **Feedback**: Address review comments
+4. **Approval**: PR receives approval
+5. **Merge**: Maintainer merges the PR
+
+### Review Guidelines
+
+**For Reviewers:**
+
+- Be constructive and respectful
+- Explain the reasoning behind suggestions
+- Approve if the change meets standards
+- Request changes if issues exist
+
+**For Contributors:**
+
+- Respond to all review comments
+- Make requested changes or explain why not
+- Mark conversations as resolved when addressed
+
+### Review Criteria
+
+- Code quality and style
+- Test coverage
+- Documentation
+- Performance impact
+- Security considerations
+- Backward compatibility
+
+## Development Tools
+
+### Code Quality Workflow
+
+When making changes, use these tools:
+
+```bash
+# For new features
+refactor-lint-fixer        # Check and fix linting
+code-documentation-writer  # Add/update docstrings
+unit-test-writer           # Add tests
+amplitude-event-injector   # Add analytics for user features
+```
+
+### Pre-commit Hooks
+
+Our pre-commit hooks automatically run:
+
+```bash
+# Backend hooks
+black                      # Code formatting
+ruff                       # Linting
+bandit                     # Security checks
+detect-secrets             # Secret detection
+pip-audit                  # Dependency security
+pytest                     # Tests (on push)
+
+# Frontend hooks
+eslint                     # Linting
+prettier                   # Formatting (if configured)
+```
+
+## Types of Contributions
+
+### Bug Reports
+
+When reporting bugs, include:
+
+- Clear title and description
+- Steps to reproduce
+- Expected vs actual behavior
+- Environment details (OS, browser, versions)
+- Screenshots or error messages
+- Related logs
+
+### Feature Requests
+
+When proposing features:
+
+- Use a clear title
+- Describe the problem it solves
+- Propose a solution
+- Consider alternatives
+- Discuss impact and trade-offs
+
+### Documentation
+
+Documentation improvements are welcome:
+
+- Fix typos and errors
+- Add examples
+- Improve clarity
+- Update outdated information
+- Add diagrams or visuals
+
+## Getting Help
+
+### Communication Channels
+
+- **GitHub Issues**: Bug reports and feature requests
+- **GitHub Discussions**: Questions and ideas
+- **Pull Requests**: Code changes and reviews
+
+### Resources
+
+- [Code Style Guidelines](/development/code-style)
+- [Testing Guidelines](/development/testing)
+- [API Reference](/api-reference/introduction)
+- [Architecture Documentation](/essentials/architecture)
+
+## Recognition
+
+Contributors are recognized in:
+
+- CONTRIBUTORS.md file
+- Release notes
+- Project documentation
+
+Thank you for contributing to Gistly Call Analytics!
+
+<Note>
+  **First-time contributors?** Start with good first issues labeled `good first issue` or `help wanted` in our issue tracker.
+</Note>

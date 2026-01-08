@@ -1,0 +1,740 @@
+---
+title: "Code Style"
+description: "Code style guidelines for Gistly Call Analytics"
+icon: "code"
+---
+
+This document outlines the code style guidelines for the Gistly Call Analytics project. Following these standards ensures code consistency, readability, and maintainability across the codebase.
+
+## Table of Contents
+
+- [Backend (Python/Flask)](#backend-pythonflask)
+- [Frontend (TypeScript/Next.js)](#frontend-typescriptnextjs)
+- [Naming Conventions](#naming-conventions)
+- [File Structure](#file-structure)
+- [Documentation](#documentation)
+
+---
+
+## Backend (Python/Flask)
+
+### Code Formatting
+
+We use **Black** as our code formatter with a line length of 100 characters.
+
+```toml
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+```
+
+**Usage:**
+
+```bash
+# Format all Python files
+black .
+
+# Format specific file
+black app/routes/meetings.py
+
+# Check formatting without making changes
+black --check .
+```
+
+### Linting
+
+We use **Ruff** as our linter, which combines functionality from multiple tools.
+
+```toml
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+```
+
+**Common Ruff Rules:**
+
+```bash
+# Run linter
+ruff check .
+
+# Fix auto-fixable issues
+ruff check --fix .
+```
+
+**Enabled Rules:**
+
+- Import sorting (`I`)
+- PEP 8 compliance
+- Code complexity checks
+- Unused variable detection
+
+**Ignored Rules (for gradual improvement):**
+
+- `F401`: Unused imports
+- `F403`: Star imports
+- `E722`: Bare except
+- `E501`: Line length (handled by Black)
+
+### PEP 8 Compliance
+
+Follow [PEP 8](https://pep8.org/) style guide with these specifics:
+
+#### Imports
+
+```python
+# Standard library imports
+import json
+from uuid import uuid4
+from datetime import datetime
+
+# Third-party imports
+import pytest
+from flask import Flask, jsonify
+from sqlalchemy.orm import relationship
+
+# Local imports
+from app.models import User, Organisation
+from app.extensions import db
+```
+
+**Rules:**
+
+- Group imports: stdlib → third-party → local
+- Sort imports alphabetically within groups
+- Use absolute imports for app modules
+- Use `isort` (via Ruff) for automatic sorting
+
+#### Spacing
+
+```python
+# Good
+def function_name(arg1, arg2, arg3=None):
+    """Function docstring."""
+    if arg1 == arg2:
+        return True
+    return False
+
+# Bad
+def function_name(arg1,arg2,arg3=None):
+    if arg1==arg2:
+        return True
+    return False
+```
+
+**Rules:**
+
+- Spaces around operators: `x = 1 + 2`
+- Spaces after commas: `func(a, b, c)`
+- No spaces inside brackets: `list[0]`
+- Blank line between functions (2 for top-level)
+
+#### Naming
+
+```python
+# Classes: PascalCase
+class MeetingService:
+    """Service for meeting operations."""
+
+# Functions and variables: snake_case
+def get_meeting_by_id(meeting_id):
+    """Get a meeting by its ID."""
+    pass
+
+# Constants: UPPER_SNAKE_CASE
+MAX_MEETINGS_PER_PAGE = 50
+DEFAULT_TIMEOUT = 30
+
+# Private: single leading underscore
+def _internal_helper():
+    """Internal helper function."""
+    pass
+```
+
+#### Type Hints
+
+```python
+from typing import List, Optional, Dict, Any
+from uuid import UUID
+
+def get_meeting(
+    meeting_id: UUID,
+    include_deleted: bool = False
+) -> Optional[Dict[str, Any]]:
+    """Get a meeting by ID.
+
+    Args:
+        meeting_id: The meeting UUID
+        include_deleted: Whether to include deleted meetings
+
+    Returns:
+        Meeting dictionary or None if not found
+    """
+    pass
+```
+
+### Docstrings
+
+Use **Google style docstrings**:
+
+```python
+def create_meeting(
+    title: str,
+    start_time: datetime,
+    user_id: UUID
+) -> Meeting:
+    """Create a new meeting.
+
+    This function creates a meeting with the given parameters and
+    saves it to the database.
+
+    Args:
+        title: The meeting title
+        start_time: When the meeting starts
+        user_id: The ID of the user creating the meeting
+
+    Returns:
+        The created Meeting object
+
+    Raises:
+        ValueError: If title is empty
+        PermissionError: If user lacks permission
+
+    Example:
+        >>> meeting = create_meeting(
+        ...     "Weekly Standup",
+        ...     datetime.now(),
+        ...     user.id
+        ... )
+        >>> print(meeting.title)
+        'Weekly Standup'
+    """
+    pass
+```
+
+### Error Handling
+
+```python
+# Good - specific exceptions
+try:
+    meeting = Meeting.query.get(meeting_id)
+    if not meeting:
+        raise ValueError(f"Meeting {meeting_id} not found")
+except SQLAlchemyError as e:
+    logger.error(f"Database error: {e}")
+    raise
+
+# Bad - bare except
+try:
+    meeting = Meeting.query.get(meeting_id)
+except:
+    pass
+```
+
+**Rules:**
+
+- Catch specific exceptions
+- Always log errors
+- Raise meaningful exceptions
+- Use custom exceptions for domain errors
+
+### Flask-Specific Patterns
+
+#### Route Handlers
+
+```python
+from flask import Blueprint, jsonify, request
+from app.extensions import db
+
+bp = Blueprint('meetings', __name__)
+
+@bp.route('/meetings', methods=['GET'])
+def get_meetings():
+    """Get all meetings for current user."""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+
+        meetings = Meeting.query.paginate(
+            page=page,
+            per_page=per_page
+        )
+
+        return jsonify({
+            'meetings': [m.to_dict() for m in meetings.items],
+            'total': meetings.total,
+            'pages': meetings.pages
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error fetching meetings: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+```
+
+#### Configuration
+
+```python
+class Config:
+    """Base configuration."""
+    DEBUG = False
+    TESTING = False
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+class DevelopmentConfig(Config):
+    """Development configuration."""
+    DEBUG = True
+    SQLALCHEMY_DATABASE_URI = 'postgresql://localhost/dev_db'
+
+class ProductionConfig(Config):
+    """Production configuration."""
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
+```
+
+---
+
+## Frontend (TypeScript/Next.js)
+
+### Code Formatting
+
+We use **Prettier** for consistent code formatting (if configured).
+
+**Configuration (.prettierrc):**
+
+```json
+{
+  "semi": true,
+  "trailingComma": "es5",
+  "singleQuote": true,
+  "printWidth": 100,
+  "tabWidth": 2
+}
+```
+
+### Linting
+
+We use **ESLint** with Next.js configuration.
+
+**Configuration (.eslintrc.json):**
+
+```json
+{
+  "root": true,
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "react-hooks/exhaustive-deps": "warn",
+    "@next/next/no-img-element": "error"
+  }
+}
+```
+
+**Usage:**
+
+```bash
+# Run linter
+npm run lint
+
+# Fix auto-fixable issues
+npm run lint -- --fix
+```
+
+### TypeScript Style
+
+#### Type Definitions
+
+```typescript
+// Interfaces for object shapes
+interface Meeting {
+  id: string;
+  title: string;
+  startTime: Date;
+  endTime: Date;
+  attendees: Attendee[];
+}
+
+// Types for unions/aliases
+type MeetingStatus = 'scheduled' | 'in-progress' | 'completed' | 'cancelled';
+
+// Type assertions (avoid when possible)
+const meetingId = data.id as string;
+```
+
+#### Components
+
+```typescript
+// Functional components with TypeScript
+import React from 'react';
+import { NextPage } from 'next';
+
+interface Props {
+  meeting: Meeting;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const MeetingCard: React.FC<Props> = ({ meeting, onEdit, onDelete }) => {
+  const handleEdit = () => {
+    onEdit(meeting.id);
+  };
+
+  return (
+    <div className="meeting-card">
+      <h3>{meeting.title}</h3>
+      <button onClick={handleEdit}>Edit</button>
+      <button onClick={() => onDelete(meeting.id)}>Delete</button>
+    </div>
+  );
+};
+
+export default MeetingCard;
+```
+
+#### Hooks
+
+```typescript
+// Custom hooks with TypeScript
+import { useState, useEffect } from 'react';
+
+interface UseMeetingReturn {
+  meeting: Meeting | null;
+  loading: boolean;
+  error: string | null;
+}
+
+function useMeeting(meetingId: string): UseMeetingReturn {
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchMeeting() {
+      try {
+        const data = await api.getMeeting(meetingId);
+        setMeeting(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchMeeting();
+  }, [meetingId]);
+
+  return { meeting, loading, error };
+}
+```
+
+### React Best Practices
+
+#### Component Structure
+
+```typescript
+// Good - organized component
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
+import { useAnalytics } from '@/hooks/useAnalytics';
+
+const MeetingDetail: NextPage = () => {
+  // 1. Hooks
+  const router = useRouter();
+  const { trackEvent } = useAnalytics();
+  const [meeting, setMeeting] = useState<Meeting | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // 2. Effects
+  useEffect(() => {
+    // Fetch meeting data
+  }, [router.query.id]);
+
+  // 3. Event handlers
+  const handleDelete = async () => {
+    // Delete logic
+  };
+
+  // 4. Render helpers
+  if (loading) return <LoadingSpinner />;
+  if (!meeting) return <ErrorMessage />;
+
+  // 5. Main render
+  return (
+    <div>
+      <h1>{meeting.title}</h1>
+      {/* ... */}
+    </div>
+  );
+};
+```
+
+#### Props Destructuring
+
+```typescript
+// Good - destructured with defaults
+interface ButtonProps {
+  text: string;
+  onClick: () => void;
+  variant?: 'primary' | 'secondary';
+  disabled?: boolean;
+}
+
+const Button: React.FC<ButtonProps> = ({
+  text,
+  onClick,
+  variant = 'primary',
+  disabled = false
+}) => {
+  return (
+    <button
+      className={`btn btn-${variant}`}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {text}
+    </button>
+  );
+};
+```
+
+#### Conditional Rendering
+
+```typescript
+// Good - clear conditional rendering
+{loading && <LoadingSpinner />}
+{error && <ErrorMessage message={error} />}
+{meeting && <MeetingCard meeting={meeting} />}
+
+// For mutually exclusive conditions
+{(() => {
+  if (loading) return <LoadingSpinner />;
+  if (error) return <ErrorMessage message={error} />;
+  if (!meeting) return <NotFound />;
+  return <MeetingCard meeting={meeting} />;
+})()}
+```
+
+### Next.js Specific Patterns
+
+#### Page Components
+
+```typescript
+// pages/meetings/[id].tsx
+import { GetServerSideProps } from 'next';
+
+interface PageProps {
+  meeting: Meeting;
+}
+
+export default function MeetingDetail({ meeting }: PageProps) {
+  return (
+    <div>
+      <h1>{meeting.title}</h1>
+      {/* ... */}
+    </div>
+  );
+}
+
+export const getServerSideProps: GetServerSideProps<PageProps> = async (
+  context
+) => {
+  const { id } = context.params!;
+  const meeting = await fetchMeeting(id);
+
+  if (!meeting) {
+    return { notFound: true };
+  }
+
+  return { props: { meeting } };
+};
+```
+
+#### API Routes
+
+```typescript
+// pages/api/meetings/[id].ts
+import type { NextApiRequest, NextApiResponse } from 'next';
+
+type ResponseData = {
+  meeting?: Meeting;
+  error?: string;
+};
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<ResponseData>
+) {
+  const { id } = req.query;
+
+  if (req.method === 'GET') {
+    try {
+      const meeting = await getMeeting(id as string);
+      if (!meeting) {
+        return res.status(404).json({ error: 'Meeting not found' });
+      }
+      return res.status(200).json({ meeting });
+    } catch (error) {
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+```
+
+---
+
+## Naming Conventions
+
+### General Rules
+
+| Type | Convention | Example |
+|------|------------|---------|
+| Classes | PascalCase | `MeetingService`, `UserController` |
+| Functions | snake_case (Python) / camelCase (TS) | `get_meeting()` / `getMeeting()` |
+| Variables | snake_case (Python) / camelCase (TS) | `user_id` / `userId` |
+| Constants | UPPER_SNAKE_CASE | `MAX_RETRY_COUNT` |
+| Private members | _prefix | `_internal_method` / `_internalHelper` |
+| Files | snake_case (Python) / kebab-case (TS) | `meeting_service.py` / `meeting-service.ts` |
+
+### Database
+
+```python
+# Tables: snake_case
+class MeetingParticipant(db.Model):
+    __tablename__ = 'meeting_participants'
+
+# Columns: snake_case
+meeting_id = db.Column(db.String(36), primary_key=True)
+created_at = db.Column(db.DateTime, default=datetime.utcnow)
+```
+
+### API Endpoints
+
+```python
+# Routes: kebab-case
+@bp.route('/meeting-notes', methods=['GET'])
+@bp.route('/meeting-notes/<note_id>', methods=['GET', 'PUT', 'DELETE'])
+```
+
+### Git Branches
+
+```
+feature/add-user-authentication
+fix/race-condition-in-updates
+docs/update-api-documentation
+refactor/optimize-database-queries
+```
+
+---
+
+## File Structure
+
+### Backend Structure
+
+```
+backend-meeting-notes/
+├── app/
+│   ├── __init__.py
+│   ├── config.py              # Configuration classes
+│   ├── extensions.py          # Flask extensions
+│   ├── models/                # Database models
+│   │   ├── __init__.py
+│   │   ├── user.py
+│   │   └── meeting.py
+│   ├── routes/                # API routes
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   └── meetings.py
+│   ├── services/              # Business logic
+│   │   ├── auth_service.py
+│   │   └── meeting_service.py
+│   └── utils/                 # Utilities
+│       ├── validators.py
+│       └── helpers.py
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── conftest.py
+├── requirements.txt
+├── pyproject.toml
+└── run.py
+```
+
+### Frontend Structure
+
+```
+meeting-notes-dashboard/
+├── src/
+│   ├── pages/                 # Next.js pages
+│   │   ├── index.tsx
+│   │   ├── _app.tsx
+│   │   └── api/              # API routes
+│   ├── components/            # Reusable components
+│   │   ├── ui/               # UI components
+│   │   └── layout/           # Layout components
+│   ├── hooks/                # Custom hooks
+│   │   ├── useAnalytics.ts
+│   │   └── useMeeting.ts
+│   ├── services/             # API services
+│   │   └── api.ts
+│   ├── store/                # State management
+│   │   └── use-global-state/
+│   ├── types/                # TypeScript types
+│   │   └── index.ts
+│   └── utils/                # Utilities
+│       └── helpers.ts
+├── __tests__/                # Test files
+├── public/                   # Static assets
+├── package.json
+├── tsconfig.json
+└── next.config.js
+```
+
+---
+
+## Documentation
+
+### Code Comments
+
+```python
+# Bad - obvious comment
+# Increment the counter
+count += 1
+
+# Good - explanatory comment
+# Retry failed requests up to 3 times with exponential backoff
+for attempt in range(MAX_RETRIES):
+    # ...
+```
+
+### Inline Documentation
+
+- Document complex algorithms
+- Explain non-obvious business logic
+- Add context for workarounds
+- Reference external resources
+
+### README Files
+
+Each major module should have a README explaining:
+
+- Purpose and functionality
+- Usage examples
+- Dependencies
+- Testing approach
+
+<Warning>
+  **Code Review**: All code must pass linting and formatting checks before merging. Use pre-commit hooks to catch issues early.
+</Warning>
+
+---
+
+## Resources
+
+- [PEP 8 Style Guide](https://pep8.org/)
+- [Black Code Formatter](https://black.readthedocs.io/)
+- [Ruff Linter](https://docs.astral.sh/ruff/)
+- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
+- [Next.js Documentation](https://nextjs.org/docs)
+- [React Documentation](https://react.dev/)
+
+<Note>
+  **Automation**: Most style checks are automated via pre-commit hooks and CI/CD pipelines. Focus on writing clean code, and let the tools handle formatting.
+</Note>

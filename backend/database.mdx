@@ -1,0 +1,637 @@
+---
+title: "Database"
+description: "PostgreSQL setup, SQLAlchemy ORM, database migrations, and connection pooling"
+icon: "database"
+---
+
+# Database
+
+The Gistly Call Analytics backend uses **PostgreSQL** as the primary database with **SQLAlchemy** ORM and **Flask-Migrate** for database migrations.
+
+## PostgreSQL Setup
+
+### Database Requirements
+
+- **PostgreSQL Version**: 12+ or 15+ (recommended)
+- **Extensions**: `pgcrypto` (for UUID generation)
+- **SSL**: Required for production connections
+
+### Local Development Setup
+
+#### Install PostgreSQL
+
+<AccordionGroup>
+  <Accordion icon="terminal" title="macOS (Homebrew)">
+    ```bash
+    brew install postgresql@15
+    brew services start postgresql@15
+    ```
+  </Accordion>
+  <Accordion icon="terminal" title="Ubuntu/Debian">
+    ```bash
+    sudo apt-get update
+    sudo apt-get install postgresql postgresql-contrib
+    sudo systemctl start postgresql
+    ```
+  </Accordion>
+  <Accordion icon="terminal" title="Windows">
+    Download and install from [PostgreSQL Official Site](https://www.postgresql.org/download/windows/)
+  </Accordion>
+</AccordionGroup>
+
+#### Create Database
+
+```bash
+# Connect to PostgreSQL
+psql -U postgres
+
+# Create development database
+CREATE DATABASE dev_backend_database;
+
+# Create user and grant privileges
+CREATE USER shishirmehto WITH PASSWORD 'password';
+GRANT ALL PRIVILEGES ON DATABASE dev_backend_database TO shishirmehto;
+
+# Exit
+\q
+```
+
+#### Enable Required Extensions
+
+```bash
+psql -U postgres -d dev_backend_database
+
+# Enable pgcrypto for UUID generation
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+# Create UUID function wrapper
+CREATE OR REPLACE FUNCTION uuid_generate_v4()
+RETURNS uuid AS $$
+SELECT gen_random_uuid();
+$$ LANGUAGE SQL IMMUTABLE;
+```
+
+### Production Database (AWS RDS)
+
+The backend uses AWS RDS PostgreSQL for production:
+
+```python
+SQLALCHEMY_DATABASE_URI = "postgresql://user:pass@backend-db.xxx.ap-south-1.rds.amazonaws.com:5432/backend_database"
+```
+
+**Configuration:**
+- **Region**: ap-south-1
+- **Instance Class**: db.t3.medium or higher
+- **Storage**: 100GB+ with auto-scaling
+- **Backup**: 7-day retention
+- **Multi-AZ**: Enabled for high availability
+
+## SQLAlchemy ORM
+
+### Overview
+
+SQLAlchemy provides a Python ORM interface to PostgreSQL:
+
+```python
+from ..extensions import db
+
+class User(db.Model):
+    __tablename__ = "users"
+
+    u_id = db.Column(db.String, primary_key=True)
+    u_email = db.Column(db.String, unique=True, nullable=False)
+    u_password = db.Column(db.String, nullable=False)
+    u_org_id = db.Column(db.String, db.ForeignKey("organisations.o_id"))
+
+    # Relationships
+    organisation = db.relationship("Organisation", back_populates="users")
+```
+
+### Database Models
+
+All models are defined in `/backend-meeting-notes/app/models/` and imported in `/backend-meeting-notes/app/models/__init__.py`:
+
+**Core Models:**
+- `User`: User accounts and authentication
+- `Organisation`: Organizations/tenants
+- `Meeting`: Meeting/call records
+- `Transcription`: Call transcriptions
+- `Summary`: AI-generated summaries
+- `Scores`: Call scoring data
+- `Team`: Team management
+- `Roles`: User roles and permissions
+
+**Supporting Models:**
+- `SalesAgent`, `SalesManager`: Sales team members
+- `Leads`, `LeadsProfile`: Lead management
+- `Tickets`: Support ticket tracking
+- `Notifications`: User notifications
+- `Templates`: Call templates
+- `Product`, `ProductCategory`: Product catalog
+
+### Model Relationships
+
+#### One-to-Many
+
+```python
+class Organisation(db.Model):
+    o_id = db.Column(db.String, primary_key=True)
+    o_name = db.Column(db.String, nullable=False)
+
+    # One organisation has many users
+    users = db.relationship("User", back_populates="organisation")
+```
+
+#### Many-to-Many
+
+```python
+# Association table
+user_roles = db.Table(
+    "user_roles",
+    db.Column("u_id", db.String, db.ForeignKey("users.u_id"), primary_key=True),
+    db.Column("r_id", db.String, db.ForeignKey("roles.r_id"), primary_key=True)
+)
+
+class User(db.Model):
+    # Many users have many roles
+    roles = db.relationship("Role", secondary=user_roles, back_populates="users")
+```
+
+#### Foreign Keys
+
+```python
+class Meeting(db.Model):
+    m_id = db.Column(db.String, primary_key=True)
+    m_user_id = db.Column(db.String, db.ForeignKey("users.u_id"))
+    m_org_id = db.Column(db.String, db.ForeignKey("organisations.o_id"))
+
+    # Relationships
+    user = db.relationship("User", backref="meetings")
+    organisation = db.relationship("Organisation", backref="meetings")
+```
+
+### Querying
+
+#### Basic Queries
+
+```python
+# Get all users
+users = User.query.all()
+
+# Get user by ID
+user = User.query.get(user_id)
+
+# Filter users
+users = User.query.filter_by(u_org_id=org_id).all()
+
+# Complex query
+from sqlalchemy import or_, and_
+
+meetings = Meeting.query.filter(
+    or_(
+        Meeting.m_status == "completed",
+        Meeting.m_status == "processing"
+    )
+).all()
+```
+
+#### Joins
+
+```python
+# Join meeting with user
+results = db.session.query(Meeting, User).join(
+    User, Meeting.m_user_id == User.u_id
+).all()
+
+# Join with organisation
+meetings = Meeting.query.join(Organisation).filter(
+    Organisation.o_name == "Acme Corp"
+).all()
+```
+
+#### Aggregation
+
+```python
+from sqlalchemy import func
+
+# Count meetings per user
+meeting_counts = db.session.query(
+    User.u_email,
+    func.count(Meeting.m_id).label("meeting_count")
+).outerjoin(Meeting).group_by(User.u_id).all()
+
+# Average score
+avg_score = db.session.query(
+    func.avg(Scores.s_score)
+).filter_by(m_id=meeting_id).scalar()
+```
+
+## Database Migrations
+
+### Flask-Migrate/Alembic
+
+The backend uses **Flask-Migrate** (wrapper around Alembic) for database migrations:
+
+```python
+from flask_migrate import Migrate
+
+migrate = Migrate()
+migrate.init_app(app, db)
+```
+
+### Migration Workflow
+
+#### Create Migration
+
+```bash
+# Auto-generate migration from model changes
+flask db migrate -m "Add user preferences table"
+
+# Manual migration (for complex changes)
+flask db revision -m "Custom migration script"
+```
+
+#### Apply Migration
+
+```bash
+# Upgrade to latest version
+flask db upgrade
+
+# Upgrade to specific version
+flask db upgrade <revision_id>
+```
+
+#### Rollback
+
+```bash
+# Rollback one version
+flask db downgrade
+
+# Rollback to specific version
+flask db downgrade <revision_id>
+```
+
+#### Migration History
+
+```bash
+# Show migration history
+flask db history
+
+# Show current version
+flask db current
+```
+
+### Migration Structure
+
+Migrations are stored in `/migrations/versions/`:
+
+```
+migrations/
+├── versions/
+│   ├── 12345_add_user_table.py
+│   ├── 67890_add_org_table.py
+│   └── 24681_add_indexes.py
+├── env.py
+└── script.py.mako
+```
+
+### Example Migration
+
+```python
+"""Add user preferences table
+
+Revision ID: 12345_add_user_prefs
+Revises: 67890_add_org_table
+Create Date: 2024-01-08 12:00:00.000000
+"""
+from alembic import op
+import sqlalchemy as sa
+
+def upgrade():
+    op.create_table(
+        'user_preferences',
+        sa.Column('up_id', sa.String(), nullable=False),
+        sa.Column('u_id', sa.String(), nullable=False),
+        sa.Column('preferences', sa.JSON(), nullable=True),
+        sa.ForeignKeyConstraint(['u_id'], ['users.u_id']),
+        sa.PrimaryKeyConstraint('up_id')
+    )
+
+def downgrade():
+    op.drop_table('user_preferences')
+```
+
+### Testing Migrations
+
+For testing, the backend creates isolated schemas:
+
+```python
+if app.config.get("TESTING"):
+    import uuid
+    schema = f"test_schema_{uuid.uuid4().hex[:8]}"
+
+    # Set search_path to isolated schema
+    connect_args = app.config["SQLALCHEMY_ENGINE_OPTIONS"]["connect_args"]
+    connect_args["options"] = f"-csearch_path={schema}"
+
+    # Create schema
+    db.session.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+    db.session.commit()
+```
+
+## Connection Pooling
+
+### Pool Configuration
+
+SQLAlchemy connection pooling is configured in `app/config.py`:
+
+```python
+SQLALCHEMY_ENGINE_OPTIONS = {
+    "pool_size": 50,          # Base pool size
+    "max_overflow": 20,       # Overflow connections
+    "pool_timeout": 30,       # Wait time for connection
+    "pool_recycle": 1800,     # Recycle after 30 minutes
+    "pool_pre_ping": True,    # Test connections before use
+}
+```
+
+### How Pooling Works
+
+1. **Pool Size (50)**: Number of persistent connections
+2. **Max Overflow (20)**: Additional connections under load
+3. **Total Capacity**: 70 concurrent connections
+4. **Pool Timeout**: Wait 30 seconds for connection before error
+5. **Pool Recycle**: Replace connections every 30 minutes
+6. **Pre-ping**: Test connection validity before use
+
+### Connection Lifecycle
+
+```
+Request → Pool (check out) → Execute Query → Pool (check in)
+                ↓
+         If invalid (pre_ping)
+                ↓
+         Create new connection
+```
+
+### Custom Retry Logic
+
+The backend implements custom retry logic for initial connections:
+
+```python
+class RetryingDatabase(SQLAlchemy):
+    def get_engine(self, app=None, bind=None):
+        max_retries = 3
+        retry_delay = 1
+
+        for attempt in range(max_retries):
+            try:
+                engine = super().get_engine(app, bind)
+                with engine.connect() as conn:
+                    conn.execute("SELECT 1")
+                return engine
+            except OperationalError as e:
+                if "SSL" in str(e) and attempt < max_retries - 1:
+                    sleep(retry_delay)
+                    continue
+                raise
+
+db = RetryingDatabase(session_options={"expire_on_commit": False})
+```
+
+### Session Management
+
+```python
+# Session configuration
+db = RetryingDatabase(
+    session_options={"expire_on_commit": False}
+)
+```
+
+**`expire_on_commit=False`**: Allows access to object attributes after transaction commit, preventing `DetachedInstanceError`.
+
+## Database Indexes
+
+### Index Types
+
+#### Primary Indexes
+
+Automatically created on primary keys:
+
+```python
+class Meeting(db.Model):
+    m_id = db.Column(db.String, primary_key=True)  # Indexed
+```
+
+#### Unique Indexes
+
+Enforce uniqueness and speed up lookups:
+
+```python
+class User(db.Model):
+    u_email = db.Column(db.String, unique=True, nullable=False)  # Indexed
+```
+
+#### Composite Indexes
+
+For queries filtering on multiple columns:
+
+```python
+class Meeting(db.Model):
+    m_user_id = db.Column(db.String, db.ForeignKey("users.u_id"), index=True)
+    m_org_id = db.Column(db.String, db.ForeignKey("organisations.o_id"), index=True)
+    m_created_at = db.Column(db.DateTime, index=True)
+
+    # Composite index for user + org queries
+    __table_args__ = (
+        db.Index('idx_user_org', 'm_user_id', 'm_org_id'),
+    )
+```
+
+#### Full-Text Search
+
+For text search capabilities:
+
+```python
+class Meeting(db.Model):
+    m_title = db.Column(db.String)
+    m_transcript = db.Column(db.Text)
+
+    __table_args__ = (
+        db.Index('idx_transcript_gin', 'm_transcript', postgresql_using='gin'),
+    )
+```
+
+### Creating Indexes
+
+#### Via Migration
+
+```python
+def upgrade():
+    # Create index
+    op.create_index(
+        'idx_meeting_user_org',
+        'meetings',
+        ['m_user_id', 'm_org_id']
+    )
+
+    # Create composite index
+    op.create_index(
+        'idx_meeting_status_date',
+        'meetings',
+        ['m_status', 'm_created_at']
+    )
+
+def downgrade():
+    op.drop_index('idx_meeting_user_org')
+    op.drop_index('idx_meeting_status_date')
+```
+
+#### Via Model
+
+```python
+class Meeting(db.Model):
+    __tablename__ = "meetings"
+
+    # Single column
+    m_user_id = db.Column(db.String, index=True)
+
+    # Composite
+    __table_args__ = (
+        db.Index('idx_status_created', 'm_status', 'm_created_at'),
+    )
+```
+
+### Index Best Practices
+
+1. **Index frequently queried columns**: Filter, join, and sort columns
+2. **Composite indexes for multi-column queries**: Order matters (most selective first)
+3. **Avoid over-indexing**: Each index slows down writes
+4. **Monitor query performance**: Use `EXPLAIN ANALYZE` to verify index usage
+5. **Regular maintenance**: Run `VACUUM ANALYZE` periodically
+
+### Query Optimization
+
+```python
+# Use indexes - GOOD
+meetings = Meeting.query.filter_by(m_user_id=user_id).all()
+
+# Function on column - BAD (no index usage)
+meetings = Meeting.query.filter(
+    func.lower(Meeting.m_title) == "meeting title"
+).all()
+
+# Solution - Store lowercased version
+class Meeting(db.Model):
+    m_title = db.Column(db.String)
+    m_title_lower = db.Column(db.String, index=True)
+```
+
+## Database Health Checks
+
+### Connection Verification
+
+```python
+def check_db_health():
+    """Check if database is accessible."""
+    try:
+        db.session.execute(text("SELECT 1"))
+        return True
+    except Exception as e:
+        return False
+```
+
+### Pool Statistics
+
+```python
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
+
+@event.listens_for(Engine, "connect")
+def receive_connect(dbapi_conn, connection_record):
+    """Log new connections."""
+    logger.info("New database connection created")
+
+@event.listens_for(Engine, "checkout")
+def receive_checkout(dbapi_conn, connection_record, connection_proxy):
+    """Log connection checkouts."""
+    logger.info("Connection checked out from pool")
+```
+
+## Best Practices
+
+### 1. Connection Management
+
+- **Always close sessions**: Use context managers or Flask's automatic cleanup
+- **Avoid long-running transactions**: Keep transactions short
+- **Use connection pooling**: Don't create connections per request
+- **Handle connection errors**: Implement retry logic
+
+### 2. Query Optimization
+
+- **Select only needed columns**: Avoid `SELECT *`
+- **Use indexes**: Create indexes on frequently queried columns
+- **Limit results**: Use `.limit()` for large result sets
+- **Batch operations**: Use bulk inserts/updates
+
+### 3. Migration Best Practices
+
+- **Review migrations**: Always review auto-generated migrations
+- **Test migrations**: Test on development database first
+- **Backward compatibility**: Ensure downgrade() is implemented
+- **Atomic changes**: Keep migrations focused and atomic
+
+### 4. Security
+
+- **Use parameterized queries**: Prevent SQL injection
+- **Principle of least privilege**: Database user with minimal permissions
+- **SSL connections**: Always use SSL in production
+- **Environment variables**: Store credentials securely
+
+## Troubleshooting
+
+### Connection Pool Exhausted
+
+**Error**: `TimeoutError: QueuePool limit exceeded`
+
+**Solutions**:
+1. Increase `pool_size` and `max_overflow`
+2. Check for unclosed sessions (connection leaks)
+3. Reduce concurrent requests
+4. Optimize long-running queries
+
+### SSL Connection Errors
+
+**Error**: `OperationalError: (ssl error)`
+
+**Solutions**:
+1. Verify SSL certificate is valid
+2. Check `sslmode` in connection args
+3. For development, set `sslmode: "disable"`
+4. Ensure database supports SSL
+
+### Migration Conflicts
+
+**Error**: `Alembic conflict detected`
+
+**Solutions**:
+1. Resolve migration conflict manually
+2. Use `flask db merge` to merge branches
+3. Ensure linear migration history
+4. Don't edit existing migrations
+
+### Slow Queries
+
+**Diagnosis**:
+
+```bash
+# Enable slow query log
+ALTER DATABASE backend_database SET log_min_duration_statement = 1000;
+```
+
+**Solutions**:
+1. Add appropriate indexes
+2. Use `EXPLAIN ANALYZE` to analyze query plan
+3. Rewrite query for better index usage
+4. Consider denormalization for complex queries
+5. Use materialized views for heavy aggregations

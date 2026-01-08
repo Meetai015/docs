@@ -1,0 +1,494 @@
+---
+title: "AI Tools"
+description: "AI-assisted development workflow for Gistly"
+icon: "sparkles"
+---
+
+## Overview
+
+Gistly embraces AI-assisted development to accelerate productivity and maintain code quality. This guide covers the AI tools and workflows used in the project.
+
+## Supported AI Tools
+
+### Cursor IDE
+
+[Cursor](https://cursor.sh) is an AI-first code editor built on VS Code with native AI integration.
+
+#### Setup
+
+1. **Install Cursor**
+   ```bash
+   # Download from https://cursor.sh
+   # Or use Homebrew
+   brew install --cask cursor
+   ```
+
+2. **Configure Cursor for Gistly**
+
+   Open Cursor Settings (Cmd+,) and configure:
+
+   ```json
+   {
+     "cursor.ai.enabled": true,
+     "cursor.ai.model": "claude-3.5-sonnet",
+     "cursor.ai.temperature": 0.3,
+     "cursor.ai.maxTokens": 2000
+   }
+   ```
+
+3. **Open Gistly in Cursor**
+   ```bash
+   cursor /Users/shishirmehto/git/gistly-call-analytics
+   ```
+
+#### Features
+
+- **AI Chat** (Cmd+L): Ask questions about code, get explanations
+- **Code Generation** (Cmd+K): Generate code from natural language
+- **Refactoring** (Cmd+I): Intelligent code refactoring
+- **Multi-file Editing**: Edit multiple files simultaneously
+- **Context Awareness**: AI understands your entire codebase
+
+#### Workflow
+
+1. **Code Review**
+   ```
+   Use Cursor to review code changes:
+   - Select the code
+   - Press Cmd+L
+   - Ask: "Review this code for bugs and improvements"
+   ```
+
+2. **Generate Tests**
+   ```
+   Select a function
+   Press Cmd+K
+   Prompt: "Write unit tests for this function"
+   ```
+
+3. **Debug Issues**
+   ```
+   Use AI Chat to debug:
+   - Describe the issue
+   - Paste error messages
+   - Get suggested fixes
+   ```
+
+### Claude Code
+
+[Claude Code](https://claude.ai/code) is Anthropic's official CLI for Claude, designed for software development tasks.
+
+#### Setup
+
+1. **Install Claude Code CLI**
+   ```bash
+   npm install -g @anthropic/claude-code
+   ```
+
+2. **Authenticate**
+   ```bash
+   claude-code auth
+   ```
+
+3. **Navigate to Gistly**
+   ```bash
+   cd /Users/shishirmehto/git/gistly-call-analytics
+   claude-code
+   ```
+
+#### Features
+
+- **Context-Aware**: Understands your entire codebase
+- **Multi-File Operations**: Edit multiple files at once
+- **Git Integration**: Smart commit messages and PR reviews
+- **Code Analysis**: Deep code understanding and refactoring
+- **Testing**: Automated test generation and debugging
+
+#### Workflow
+
+1. **Code Generation**
+   ```
+   Prompt: "Create a new API endpoint for meeting analytics"
+   Claude will:
+   - Generate the endpoint code
+   - Create necessary models
+   - Add validation
+   - Write tests
+   ```
+
+2. **Bug Fixes**
+   ```
+   Prompt: "Fix the authentication bug in the login flow"
+   Claude will:
+   - Analyze the code
+   - Identify the issue
+   - Implement a fix
+   - Add tests
+   ```
+
+3. **Documentation**
+   ```
+   Prompt: "Add docstrings to all functions in analytics.py"
+   Claude will:
+   - Add comprehensive docstrings
+   - Follow project conventions
+   - Include examples
+   ```
+
+### Windsurf
+
+[Windsurf](https://windsurf.ai) is an AI-powered IDE extension for VS Code.
+
+#### Setup
+
+1. **Install VS Code Extension**
+   ```
+   Search "Windsurf AI" in VS Code extensions
+   Click "Install"
+   ```
+
+2. **Configure Windsurf**
+
+   Create `.windsurfrc.json` in project root:
+
+   ```json
+   {
+     "model": "claude-3.5-sonnet",
+     "temperature": 0.3,
+     "maxTokens": 2000,
+     "contextWindow": 200000,
+     "projectContext": {
+       "include": [
+         "meeting-notes-dashboard/**/*",
+         "backend-meeting-notes/**/*"
+       ]
+     }
+   }
+   ```
+
+3. **Restart VS Code**
+
+#### Features
+
+- **Real-time Suggestions**: AI code completions as you type
+- **Code Explanation**: Understand complex code instantly
+- **Refactoring**: Intelligent code improvements
+- **Documentation**: Auto-generate docs from code
+- **Testing**: Generate test cases automatically
+
+#### Workflow
+
+1. **Real-time Assistance**
+   ```
+   As you type, Windsurf provides:
+   - Code completions
+   - Function suggestions
+   - Parameter hints
+   - Error fixes
+   ```
+
+2. **Code Analysis**
+   ```
+   Right-click on code
+   Select "Explain with Windsurf"
+   Get detailed explanations
+   ```
+
+3. **Refactoring**
+   ```
+   Select code
+   Right-click
+   Choose "Refactor with Windsurf"
+   Apply suggested improvements
+   ```
+
+## AI-Assisted Development Workflow
+
+### 1. Project Setup
+
+When starting a new feature:
+
+```bash
+# Use Claude Code to set up the feature structure
+cd /Users/shishirmehto/git/gistly-call-analytics
+claude-code
+
+# Prompt:
+# "Create a new feature for meeting transcription with:
+#  - Frontend components in meeting-notes-dashboard
+#  - Backend API in backend-meeting-notes
+#  - Database models
+#  - API endpoints
+#  - Tests"
+```
+
+### 2. Development
+
+Daily development workflow:
+
+```bash
+# Open Cursor for the main work
+cursor /Users/shishirmehto/git/gistly-call-analytics
+
+# Use Windsurf in VS Code for real-time assistance
+code /Users/shishirmehto/git/gistly-call-analytics
+```
+
+**Example Workflow:**
+
+1. **Generate Code**
+   ```
+   In Cursor: "Create a React component for meeting insights"
+   ```
+
+2. **Get Real-time Help**
+   ```
+   In VS Code with Windsurf: Get suggestions as you type
+   ```
+
+3. **Review and Refactor**
+   ```
+   Use Claude Code: "Review the new component and suggest improvements"
+   ```
+
+### 3. Testing
+
+Generate tests with AI:
+
+```bash
+# In Claude Code
+claude-code
+
+# Prompt:
+# "Generate comprehensive tests for the meeting analytics module:
+#  - Unit tests for all functions
+#  - Integration tests for API endpoints
+#  - Edge cases and error handling
+#  - Mock external dependencies"
+```
+
+### 4. Code Review
+
+AI-assisted code review:
+
+```bash
+# In Cursor
+# Select the files changed
+# Press Cmd+L
+# Ask: "Review these changes for:
+#  - Bugs and issues
+#  - Performance improvements
+#  - Security concerns
+#  - Code style consistency"
+```
+
+### 5. Documentation
+
+Generate documentation:
+
+```bash
+# In Claude Code
+claude-code
+
+# Prompt:
+# "Update documentation for the new feature:
+#  - Add API documentation
+#  - Create user guide
+#  - Update changelog
+#  - Add examples"
+```
+
+## Best Practices
+
+### Prompt Engineering
+
+1. **Be Specific**
+   ```
+   Good: "Create a React component for meeting insights with charts for duration, participants, and action items"
+   Bad: "Create a meeting component"
+   ```
+
+2. **Provide Context**
+   ```
+   Good: "Add error handling to the login function. Use the existing error handling pattern in auth.py. Handle network errors, invalid credentials, and server errors."
+   Bad: "Add error handling"
+   ```
+
+3. **Request Tests**
+   ```
+   Always ask for tests when generating code:
+   "Create a function to calculate meeting scores and include unit tests for edge cases"
+   ```
+
+### Code Quality
+
+1. **Review AI Output**
+   - Always review generated code
+   - Run tests before committing
+   - Check for security issues
+   - Ensure code style consistency
+
+2. **Iterate**
+   - Use AI for initial drafts
+   - Refine with human expertise
+   - Combine multiple AI suggestions
+   - Learn from AI patterns
+
+3. **Test Thoroughly**
+   - Run all tests
+   - Check edge cases
+   - Verify performance
+   - Test manually
+
+### Security
+
+1. **Never Share Secrets**
+   - Don't paste API keys in AI prompts
+   - Use environment variables
+   - Sanitize sensitive data
+   - Use placeholder values
+
+2. **Review Generated Code**
+   - Check for vulnerabilities
+   - Validate input handling
+   - Review authentication logic
+   - Verify data sanitization
+
+## Common Tasks
+
+### Generate a New Feature
+
+```bash
+# In Claude Code
+claude-code
+
+# Prompt:
+# "Create a new feature for meeting sentiment analysis:
+#  - Backend API endpoint in backend-meeting-notes
+#  - Frontend component in meeting-notes-dashboard
+#  - Database model for storing sentiment scores
+#  - Tests for both frontend and backend
+#  - Documentation in docs/"
+```
+
+### Debug an Issue
+
+```bash
+# In Cursor
+# Select the problematic code
+# Press Cmd+L
+# Ask: "Debug this issue: [paste error message]. The code should [expected behavior] but it's [actual behavior]"
+```
+
+### Refactor Code
+
+```bash
+# In Claude Code
+claude-code
+
+# Prompt:
+# "Refactor the analytics module to:
+#  - Improve performance
+#  - Add better error handling
+#  - Follow project code style
+#  - Add comprehensive docstrings
+#  - Maintain backward compatibility"
+```
+
+### Generate Tests
+
+```bash
+# In Cursor
+# Select the function to test
+# Press Cmd+K
+# Prompt: "Write comprehensive tests including:
+#  - Happy path
+#  - Edge cases
+#  - Error conditions
+#  - Mocked dependencies
+#  - Performance tests"
+```
+
+## Repository Context
+
+When working with Gistly, the AI tools need context about both repositories:
+
+### Frontend Repository
+**Location:** `/Users/shishirmehto/git/gistly-call-analytics/meeting-notes-dashboard/`
+- Next.js/React application
+- TypeScript
+- Tailwind CSS
+- API integration
+
+### Backend Repository
+**Location:** `/Users/shishirmehto/git/gistly-call-analytics/backend-meeting-notes/`
+- Python/Django
+- REST API
+- PostgreSQL database
+- Business logic
+
+### Example Context Prompt
+
+```
+"I'm working on Gistly Call Analytics, which has:
+- Frontend: meeting-notes-dashboard/ (Next.js/React)
+- Backend: backend-meeting-notes/ (Python/Django)
+
+Please create a new feature for [describe feature]:
+1. Add backend API in backend-meeting-notes/
+2. Create frontend components in meeting-notes-dashboard/
+3. Update API integration
+4. Add tests for both
+5. Update documentation"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**AI tool not finding files**
+```bash
+# Ensure you're in the correct directory
+pwd  # Should be /Users/shishirmehto/git/gistly-call-analytics
+
+# For Claude Code, specify the full path
+claude-code /Users/shishirmehto/git/gistly-call-analytics
+```
+
+**Cursor not recognizing project**
+```bash
+# Reopen project in Cursor
+cursor /Users/shishirmehto/git/gistly-call-analytics
+```
+
+**Windsurf suggestions not appearing**
+```bash
+# Check VS Code extensions
+code --list-extensions | grep windsurf
+
+# Restart VS Code
+killall "Code"
+```
+
+### Getting Help
+
+- [Cursor Documentation](https://cursor.sh/docs)
+- [Claude Code Documentation](https://claude.ai/code/docs)
+- [Windsurf Documentation](https://windsurf.ai/docs)
+- Gistly Team: [Open an issue](https://github.com/your-org/gistly-call-analytics/issues)
+
+## Additional Resources
+
+### AI Tool Documentation
+- [Cursor Guide](https://cursor.sh/docs)
+- [Claude Code Guide](https://claude.ai/code/docs)
+- [Windsurf Guide](https://windsurf.ai/docs)
+
+### Prompt Engineering
+- [OpenAI Prompt Engineering Guide](https://platform.openai.com/docs/guides/prompt-engineering)
+- [Anthropic Prompt Library](https://docs.anthropic.com/claude/prompt-library)
+
+### Best Practices
+- [AI-Assisted Development](https://github.com/features/copilot)
+- [Code Review with AI](https://cursor.sh/docs/code-review)
+- [Testing with AI](https://cursor.sh/docs/testing)

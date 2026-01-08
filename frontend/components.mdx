@@ -1,0 +1,318 @@
+---
+title: "Components"
+description: "Overview of components in the Gistly frontend"
+icon: "component"
+---
+
+# Frontend Components
+
+## Component Architecture
+
+The frontend uses **shadcn/ui** as the base component library, built on:
+- **Radix UI** - Accessible, unstyled components
+- **Tailwind CSS** - Utility-first styling
+- **Class Variance Authority (CVA)** - Variant management
+
+## Directory Structure
+
+```
+src/components/
+├── ui/                    # Base shadcn/ui components
+│   ├── button.tsx
+│   ├── input.tsx
+│   ├── dialog.tsx
+│   └── ...
+├── forms/                 # Form components
+│   ├── login-form.tsx
+│   ├── meeting-filters.tsx
+│   └── ...
+├── layouts/               # Layout wrappers
+│   ├── dashboard-layout.tsx
+│   ├── auth-layout.tsx
+│   └── ...
+└── features/              # Feature-specific components
+    ├── meetings/
+    ├── reports/
+    └── admin/
+```
+
+## Base UI Components
+
+### Button
+
+```tsx
+import { Button } from '@/components/ui/button';
+
+export function Example() {
+  return (
+    <Button variant="default" size="md">
+      Click me
+    </Button>
+  );
+}
+```
+
+**Variants**: `default`, `destructive`, `outline`, `secondary`, `ghost`, `link`
+
+**Sizes**: `default`, `sm`, `lg`, `icon`
+
+### Input
+
+```tsx
+import { Input } from '@/components/ui/input';
+
+export function Example() {
+  return <Input placeholder="Enter text..." />;
+}
+```
+
+### Dialog
+
+```tsx
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+
+export function Example() {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button>Open Dialog</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Are you sure?</DialogTitle>
+        </DialogHeader>
+        <p>This action cannot be undone.</p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+### Dropdown Menu
+
+```tsx
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+export function Example() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost">Options</Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem>Edit</DropdownMenuItem>
+        <DropdownMenuItem>Delete</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+```
+
+## Form Components
+
+### Login Form
+
+Located in `src/components/forms/login-form.tsx`:
+
+```tsx
+'use client';
+
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+export function LoginForm() {
+  const form = useForm<z.infer<typeof loginSchema>>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  const onSubmit = (data: z.infer<typeof loginSchema>) => {
+    // Handle login
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        <FormField
+          control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Email</FormLabel>
+              <FormControl>
+                <Input placeholder="Email" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit">Login</Button>
+      </form>
+    </Form>
+  );
+}
+```
+
+## Layout Components
+
+### Dashboard Layout
+
+```tsx
+import { Sidebar } from '@/components/sidebar';
+import { Header } from '@/components/header';
+
+export function DashboardLayout({ children }) {
+  return (
+    <div className="flex h-screen">
+      <Sidebar />
+      <div className="flex-1 flex flex-col">
+        <Header />
+        <main className="flex-1 overflow-auto p-6">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+```
+
+## Adding New Components
+
+### Using shadcn CLI
+
+```bash
+npx shadcn-ui@latest add [component-name]
+```
+
+For example:
+```bash
+npx shadcn-ui@latest add card
+npx shadcn-ui@latest add table
+```
+
+### Manual Component
+
+Create a new component in `src/components/ui/`:
+
+```tsx
+import * as React from 'react';
+import { cn } from '@/lib/utils';
+
+export interface MyComponentProps
+  extends React.HTMLAttributes<HTMLDivElement> {
+  variant?: 'default' | 'custom';
+}
+
+const MyComponent = React.forwardRef<HTMLDivElement, MyComponentProps>(
+  ({ className, variant = 'default', ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          'base-classes',
+          variant === 'custom' && 'custom-classes',
+          className
+        )}
+        {...props}
+      />
+    );
+  }
+);
+MyComponent.displayName = 'MyComponent';
+
+export { MyComponent };
+```
+
+## Component Patterns
+
+### Server vs Client Components
+
+```tsx
+// Server Component (default)
+export async function MeetingList() {
+  const meetings = await fetchMeetings();
+  return <div>{/* ... */}</div>;
+}
+
+// Client Component (use 'use client' directive)
+'use client';
+
+export function MeetingFilters() {
+  const [filters, setFilters] = useState({});
+  return <div>{/* ... */}</div>;
+}
+```
+
+### Data Fetching Components
+
+```tsx
+// Server component with async data fetching
+export async function MeetingDetails({ id }: { id: string }) {
+  const meeting = await fetchMeeting(id);
+
+  if (!meeting) {
+    return <div>Meeting not found</div>;
+  }
+
+  return (
+    <div>
+      <h2>{meeting.title}</h2>
+      <p>{meeting.date}</p>
+    </div>
+  );
+}
+```
+
+### Error Boundaries
+
+```tsx
+'use client';
+
+export function ErrorBoundary({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <p>{error.message}</p>
+      <button onClick={reset}>Try again</button>
+    </div>
+  );
+}
+```
+
+## Next Steps
+
+- Learn about [shadcn/ui](/frontend/shadcn)
+- Understand [Styling](/frontend/styling)
+- Configure [State Management](/frontend/state-management)

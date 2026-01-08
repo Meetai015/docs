@@ -1,0 +1,739 @@
+---
+title: "Deployment"
+description: "AWS EC2 deployment, Docker configuration, PM2 process management, and CI/CD setup"
+icon: "server"
+---
+
+# Deployment
+
+The Gistly Call Analytics backend is deployed on **AWS EC2** with **Docker** containers and managed by **PM2** for process management.
+
+## AWS EC2 Deployment
+
+### EC2 Instance Configuration
+
+**Recommended Specifications:**
+
+| Resource | Development | Staging | Production |
+|----------|-------------|---------|------------|
+| Instance Type | t3.micro | t3.small | t3.medium/large |
+| vCPU | 2 | 2 | 2-4 |
+| Memory | 1 GB | 2 GB | 4-8 GB |
+| Storage | 20 GB | 30 GB | 50 GB+ |
+
+**Instance Details:**
+- **AMI**: Ubuntu Server 22.04 LTS
+- **Region**: ap-south-1 (Mumbai)
+- **Security Group**: Custom rules (see below)
+- **Key Pair**: SSH access for deployment
+
+### Security Group Configuration
+
+Configure inbound rules:
+
+| Type | Protocol | Port Range | Source | Description |
+|------|----------|------------|--------|-------------|
+| HTTP | TCP | 80 | 0.0.0.0/0 | Web traffic |
+| HTTPS | TCP | 443 | 0.0.0.0/0 | Secure web traffic |
+| Custom TCP | TCP | 8000 | 0.0.0.0/0 | Flask app |
+| SSH | TCP | 22 | Your IP | Admin access |
+
+### Server Setup
+
+#### 1. Initial Server Configuration
+
+```bash
+# Connect to EC2 instance
+ssh -i your-key.pem ubuntu@ec2-xx-xx-xx-xx.ap-south-1.compute.amazonaws.com
+
+# Update system
+sudo apt-get update && sudo apt-get upgrade -y
+
+# Install dependencies
+sudo apt-get install -y python3 python3-pip python3-venv postgresql-client
+
+# Install Node.js (for PM2)
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Add user to docker group
+sudo usermod -aG docker ubuntu
+
+# Install PM2
+sudo npm install -g pm2
+```
+
+#### 2. Application Deployment
+
+```bash
+# Clone repository
+cd /home/ubuntu
+git clone <your-repo-url> gistly-call-analytics
+cd gistly-call-analytics/backend-meeting-notes
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Set environment variables
+nano .env
+```
+
+#### 3. Environment Variables
+
+Create `.env` file:
+
+```bash
+# Flask
+FLASK_ENV=production
+SECRET_KEY=<your-secret-key>
+JWT_SECRET_KEY=<your-jwt-secret>
+
+# Database
+DATABASE_URL=postgresql://user:pass@host:5432/backend_database
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
+CACHE_ENABLED=true
+
+# AWS
+AWS_ACCESS_KEY_ID=<your-access-key>
+AWS_SECRET_ACCESS_KEY=<your-secret-key>
+AWS_REGION=ap-south-1
+S3_BUCKET_NAME=gistly-audio-storage
+
+# OpenAI
+OPENAI_API_KEY=<your-openai-key>
+
+# Frontend
+FRONTEND_URL=https://console.gistly.ai
+```
+
+## Docker Configuration
+
+### Dockerfile
+
+The backend uses a multi-stage Dockerfile for production:
+
+```dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY app ./app
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Expose port
+EXPOSE 8000
+
+# Run application
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:8000", "run:application"]
+```
+
+### Building Docker Image
+
+```bash
+# Build image
+docker build -t gistly-backend:latest .
+
+# Tag for ECR
+docker tag gistly-backend:latest <ecr-repo-url>:latest
+
+# Push to ECR
+docker push <ecr-repo-url>:latest
+```
+
+### Running with Docker
+
+```bash
+# Run container
+docker run -d \
+  --name gistly-backend \
+  -p 8000:8000 \
+  --env-file .env \
+  gistly-backend:latest
+
+# View logs
+docker logs -f gistly-backend
+
+# Stop container
+docker stop gistly-backend
+```
+
+### Docker Compose
+
+For development, use Docker Compose:
+
+```yaml
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://user:pass@db:5432/dev_db
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      - db
+      - redis
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=dev_backend_database
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
+```
+
+Run with:
+
+```bash
+docker-compose up -d
+```
+
+## PM2 Process Management
+
+### PM2 Configuration
+
+Create `ecosystem.config.js`:
+
+```javascript
+module.exports = {
+  apps: [{
+    name: 'gistly-backend',
+    script: 'run.py',
+    interpreter: 'python3',
+    interpreter_args: '-m flask run --host=0.0.0.0 --port=8000',
+    instances: 2,
+    exec_mode: 'cluster',
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '1G',
+    env: {
+      NODE_ENV: 'production',
+      FLASK_ENV: 'production'
+    },
+    error_file: './logs/err.log',
+    out_file: './logs/out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+  }]
+};
+```
+
+### PM2 Commands
+
+#### Start Application
+
+```bash
+# Start with configuration file
+pm2 start ecosystem.config.js
+
+# Or start directly
+pm2 start run.py --name gistly-backend --interpreter python3
+
+# Start with Flask
+pm2 start flask -- run --host=0.0.0.0 --port=8000 --name gistly-backend
+```
+
+#### Process Management
+
+```bash
+# List all processes
+pm2 list
+
+# Show process details
+pm2 show gistly-backend
+
+# Stop process
+pm2 stop gistly-backend
+
+# Restart process
+pm2 restart gistly-backend
+
+# Delete process
+pm2 delete gistly-backend
+
+# Stop all
+pm2 stop all
+
+# Restart all
+pm2 restart all
+```
+
+#### Monitoring
+
+```bash
+# Real-time monitoring
+pm2 monit
+
+# View logs
+pm2 logs gistly-backend
+
+# View logs for all apps
+pm2 logs
+
+# Clear logs
+pm2 flush
+```
+
+#### Cluster Mode
+
+```bash
+# Start in cluster mode (2 instances)
+pm2 start run.py -i 2 --name gistly-backend
+
+# Start with max instances (CPU cores)
+pm2 start run.py -i max --name gistly-backend
+```
+
+### PM2 Startup Script
+
+Auto-start PM2 on server reboot:
+
+```bash
+# Generate startup script
+pm2 startup
+
+# Copy and run the output command
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+
+# Save current process list
+pm2 save
+```
+
+### PM2 Logs
+
+Log files are configured in ecosystem file:
+
+```javascript
+error_file: './logs/err.log',
+out_file: './logs/out.log',
+```
+
+Rotate logs:
+
+```bash
+# Install pm2-logrotate
+pm2 install pm2-logrotate
+
+# Configure
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 7
+pm2 set pm2-logrotate:compress true
+```
+
+## CI/CD with GitHub Actions
+
+### GitHub Actions Workflow
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          cd backend-meeting-notes
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run tests
+        run: |
+          cd backend-meeting-notes
+          pytest --cov=app tests/
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Deploy to EC2
+        run: |
+          # SSH into server and deploy
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/ubuntu/gistly-call-analytics
+            git pull origin main
+            cd backend-meeting-notes
+            source venv/bin/activate
+            pip install -r requirements.txt
+            pm2 restart gistly-backend
+          EOF
+```
+
+### GitHub Secrets
+
+Configure secrets in GitHub repository settings:
+
+- `AWS_ACCESS_KEY_ID`: AWS access key
+- `AWS_SECRET_ACCESS_KEY`: AWS secret key
+- `EC2_HOST`: EC2 instance public IP/DNS
+- `EC2_SSH_KEY`: SSH private key (optional)
+
+### Alternative: AWS CodeDeploy
+
+For more complex deployments, use AWS CodeDeploy:
+
+```yaml
+# appspec.yml
+version: 0.0
+os: linux
+
+files:
+  - source: backend-meeting-notes/
+    destination: /home/ubuntu/gistly-call-analytics/backend-meeting-notes/
+
+hooks:
+  BeforeInstall:
+    - location: scripts/before_install.sh
+  AfterInstall:
+    - location: scripts/after_install.sh
+  ApplicationStart:
+    - location: scripts/start_server.sh
+```
+
+## Environment-Specific Configurations
+
+### Development
+
+```bash
+FLASK_ENV=development
+DEBUG=true
+DATABASE_URL=postgresql://user:pass@localhost:5432/dev_db
+CACHE_ENABLED=false
+```
+
+**Features:**
+- Debug mode enabled
+- Local database
+- No caching
+- Detailed error messages
+- Auto-reload on code changes
+
+### Staging
+
+```bash
+FLASK_ENV=staging
+DEBUG=true
+DATABASE_URL=postgresql://user:pass@staging-db:5432/staging_db
+CACHE_ENABLED=true
+FRONTEND_URL=https://console-staging.gistly.ai
+```
+
+**Features:**
+- Debug mode enabled for testing
+- Staging database
+- Caching enabled
+- Staging frontend URL
+- Production-like configuration
+
+### Production
+
+```bash
+FLASK_ENV=production
+DEBUG=false
+DATABASE_URL=postgresql://user:pass@prod-db:5432/prod_db
+CACHE_ENABLED=true
+FRONTEND_URL=https://console.gistly.ai
+```
+
+**Features:**
+- Debug mode disabled
+- Production database
+- Caching enabled
+- Production frontend URL
+- Optimized for performance
+
+## Reverse Proxy (Nginx)
+
+### Nginx Configuration
+
+Install and configure Nginx:
+
+```bash
+sudo apt-get install nginx
+sudo nano /etc/nginx/sites-available/gistly-backend
+```
+
+Configuration:
+
+```nginx
+upstream gistly_backend {
+    server 127.0.0.1:8000;
+}
+
+server {
+    listen 80;
+    server_name api.gistly.ai;
+
+    location / {
+        proxy_pass http://gistly_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # Increase upload size for audio files
+    client_max_body_size 100M;
+}
+```
+
+Enable site:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/gistly-backend /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+### SSL with Let's Encrypt
+
+```bash
+# Install Certbot
+sudo apt-get install certbot python3-certbot-nginx
+
+# Obtain SSL certificate
+sudo certbot --nginx -d api.gistly.ai
+
+# Auto-renewal (automatic)
+sudo certbot renew --dry-run
+```
+
+## Health Checks
+
+### Health Check Endpoint
+
+```python
+@app.route('/health')
+def health_check():
+    """Health check endpoint for load balancer."""
+    try:
+        # Check database
+        db.session.execute(text('SELECT 1'))
+
+        # Check Redis
+        redis_client.ping()
+
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 503
+```
+
+### Load Balancer Health Check
+
+Configure AWS Application Load Balancer:
+
+- **Health Check Path**: `/health`
+- **Interval**: 30 seconds
+- **Timeout**: 5 seconds
+- **Healthy Threshold**: 2 consecutive successes
+- **Unhealthy Threshold**: 3 consecutive failures
+
+## Monitoring and Logging
+
+### Application Monitoring
+
+```bash
+# PM2 monitoring
+pm2 install pm2-logrotate
+pm2 monit
+
+# System monitoring
+htop
+iostat -x 1
+```
+
+### Log Management
+
+```bash
+# Application logs
+tail -f /home/ubuntu/gistly-call-analytics/backend-meeting-notes/logs/out.log
+tail -f /home/ubuntu/gistly-call-analytics/backend-meeting-notes/logs/err.log
+
+# Nginx logs
+tail -f /var/log/nginx/access.log
+tail -f /var/log/nginx/error.log
+
+# System logs
+journalctl -u nginx -f
+```
+
+## Backup Strategy
+
+### Database Backups
+
+```bash
+# Manual backup
+pg_dump -U user -h host -d backend_database > backup.sql
+
+# Automated backup (cron)
+0 2 * * * pg_dump -U user -h host -d backend_database | gzip > /backups/db_$(date +\%Y\%m\%d).sql.gz
+```
+
+### Code Backups
+
+```bash
+# Git push to remote
+git push origin main
+
+# Or create backup
+tar -czf gistly-backup-$(date +%Y%m%d).tar.gz backend-meeting-notes/
+```
+
+## Best Practices
+
+### 1. Security
+
+- **Use HTTPS**: Enable SSL/TLS for all connections
+- **Environment variables**: Never commit secrets to git
+- **Firewall rules**: Restrict access to necessary ports only
+- **Regular updates**: Keep system and packages updated
+- **SSH keys**: Use key-based authentication, not passwords
+
+### 2. Performance
+
+- **Use PM2 cluster mode**: Utilize multiple CPU cores
+- **Enable caching**: Use Redis for frequently accessed data
+- **Connection pooling**: Configure database pool size
+- **Load balancing**: Use ALB for high availability
+- **CDN**: Serve static files via CloudFront
+
+### 3. Reliability
+
+- **Health checks**: Monitor application health
+- **Auto-restart**: Configure PM2 to auto-restart on failure
+- **Backups**: Regular database and code backups
+- **Logging**: Centralized logging for troubleshooting
+- **Monitoring**: Set up alerts for critical metrics
+
+### 4. Deployment
+
+- **Zero-downtime**: Use PM2 reload for graceful restarts
+- **Rollback**: Keep previous version for quick rollback
+- **Testing**: Test staging deployment before production
+- **Documentation**: Document deployment procedures
+- **Automation**: Automate deployment with CI/CD
+
+## Troubleshooting
+
+### Application Not Starting
+
+**Symptoms**: PM2 shows status "errored"
+
+**Solutions**:
+1. Check logs: `pm2 logs gistly-backend`
+2. Verify environment variables are loaded
+3. Check database connectivity
+4. Ensure port 8000 is not in use
+5. Verify dependencies are installed
+
+### Out of Memory
+
+**Symptoms**: PM2 restarts process frequently
+
+**Solutions**:
+1. Check memory usage: `pm2 monit`
+2. Increase `max_memory_restart` in ecosystem config
+3. Reduce number of instances
+4. Optimize database queries
+5. Upgrade EC2 instance type
+
+### Database Connection Errors
+
+**Symptoms**: "OperationalError: could not connect"
+
+**Solutions**:
+1. Verify database is accessible: `psql -h host -U user -d db`
+2. Check security group allows database port (5432)
+3. Verify DATABASE_URL is correct
+4. Check database credentials
+5. Ensure database server is running
+
+### High CPU Usage
+
+**Symptoms**: EC2 CPU at 100%
+
+**Solutions**:
+1. Check process CPU usage: `pm2 monit`
+2. Profile slow queries: Enable slow query log
+3. Add database indexes
+4. Implement caching for expensive operations
+5. Scale horizontally (add more instances)

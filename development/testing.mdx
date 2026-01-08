@@ -1,0 +1,884 @@
+---
+title: "Testing"
+description: "Testing guidelines and best practices for Gistly Call Analytics"
+icon: "test"
+---
+
+This document provides comprehensive guidelines for testing both backend and frontend components of Gistly Call Analytics.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Backend Testing (pytest)](#backend-testing-pytest)
+- [Frontend Testing (Jest)](#frontend-testing-jest)
+- [Running Tests](#running-tests)
+- [Writing Tests](#writing-tests)
+- [Best Practices](#best-practices)
+
+---
+
+## Overview
+
+Our testing strategy follows the **Testing Pyramid**:
+
+```
+        E2E Tests (minimal)
+       /                  \
+    Integration Tests (moderate)
+   /                        \
+Unit Tests (extensive)
+```
+
+### Test Categories
+
+1. **Unit Tests**: Test individual functions/classes in isolation
+2. **Integration Tests**: Test component interactions and API endpoints
+3. **Performance Tests**: Measure system performance under load
+
+### Test Coverage Goals
+
+- **Backend**: 80% minimum coverage (enforced in pre-push hooks)
+- **Frontend**: 70% minimum coverage for critical paths
+
+---
+
+## Backend Testing (pytest)
+
+### Test Structure
+
+```
+tests/
+├── conftest.py                    # Shared fixtures and configuration
+├── TEST_ARCHITECTURE.md           # Test architecture documentation
+├── unit/                          # Unit tests (fast, isolated)
+│   ├── models/                    # Model unit tests
+│   ├── services/                  # Service unit tests
+│   └── utils/                     # Utility unit tests
+├── integration/                   # Integration tests
+│   ├── auth_flows/                # Authentication flows
+│   ├── meeting_flows/             # Meeting operations
+│   ├── object_system/             # Object system functionality
+│   └── workflows/                 # Business workflows
+└── performance/                   # Performance tests
+    └── object_system/
+```
+
+### Configuration
+
+**pytest.ini** (configured in pyproject.toml):
+
+```toml
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+```
+
+### Fixtures
+
+Shared fixtures in **conftest.py**:
+
+```python
+import pytest
+from app import create_app
+from app.extensions import db
+from app.models import User, Organisation
+
+class TestConfig(DevelopmentConfig):
+    """Test configuration."""
+    TESTING = True
+    JWT_SECRET_KEY = "test-secret-key"
+    SQLALCHEMY_DATABASE_URI = "postgresql://localhost/test_db"
+
+@pytest.fixture(scope="session")
+def app():
+    """Create application for testing."""
+    app = create_app(config_class=TestConfig)
+    ctx = app.app_context()
+    ctx.push()
+    db.create_all()
+    yield app
+    ctx.pop()
+
+@pytest.fixture(scope="function")
+def client(app):
+    """Create test client."""
+    with app.test_client() as client:
+        yield client
+
+@pytest.fixture(scope="function")
+def test_user_and_org(app):
+    """Create test user and organization."""
+    org = Organisation(org_name="Test Org", org_domain="test.com")
+    user = User(u_email="test@test.com", u_first_name="Test", u_last_name="User")
+    db.session.add(org)
+    db.session.add(user)
+    db.session.commit()
+    return {"user": user, "org": org}
+
+@pytest.fixture(scope="function")
+def auth_headers(app, test_user_and_org):
+    """Create authentication headers."""
+    from flask_jwt_extended import create_access_token
+    user = test_user_and_org["user"]
+    with app.app_context():
+        token = create_access_token(identity=str(user.u_id))
+        return {"Authorization": f"Bearer {token}"}
+```
+
+### Unit Tests
+
+Test individual functions in isolation:
+
+```python
+import pytest
+from app.services.meeting_service import MeetingService
+
+class TestMeetingService:
+    """Test MeetingService methods."""
+
+    def test_create_meeting_success(self, app, test_user_and_org):
+        """Test successful meeting creation."""
+        user = test_user_and_org["user"]
+        org = test_user_and_org["org"]
+
+        with app.app_context():
+            meeting = MeetingService.create_meeting(
+                title="Test Meeting",
+                start_time=datetime.now(),
+                user_id=user.u_id,
+                org_id=org.org_id
+            )
+
+            assert meeting.title == "Test Meeting"
+            assert meeting.created_by == user.u_id
+            assert meeting.org_id == org.org_id
+
+    def test_create_meeting_invalid_title(self, app, test_user_and_org):
+        """Test meeting creation with invalid title."""
+        user = test_user_and_org["user"]
+        org = test_user_and_org["org"]
+
+        with app.app_context():
+            with pytest.raises(ValueError, match="Title cannot be empty"):
+                MeetingService.create_meeting(
+                    title="",
+                    start_time=datetime.now(),
+                    user_id=user.u_id,
+                    org_id=org.org_id
+                )
+```
+
+### Integration Tests
+
+Test API endpoints and component interactions:
+
+```python
+import json
+from flask import url_for
+
+class TestMeetingAPI:
+    """Test meeting API endpoints."""
+
+    def test_get_meetings_success(self, client, auth_headers):
+        """Test GET /meetings endpoint."""
+        response = client.get('/meetings', headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert 'meetings' in data
+        assert isinstance(data['meetings'], list)
+
+    def test_create_meeting_success(self, client, auth_headers):
+        """Test POST /meetings endpoint."""
+        meeting_data = {
+            "title": "New Meeting",
+            "start_time": "2024-01-15T10:00:00",
+            "end_time": "2024-01-15T11:00:00"
+        }
+
+        response = client.post(
+            '/meetings',
+            headers=auth_headers,
+            data=json.dumps(meeting_data)
+        )
+
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data['title'] == "New Meeting"
+
+    def test_get_meeting_not_found(self, client, auth_headers):
+        """Test GET /meetings/<id> with non-existent ID."""
+        response = client.get(
+            '/meetings/00000000-0000-0000-0000-000000000000',
+            headers=auth_headers
+        )
+
+        assert response.status_code == 404
+```
+
+### Database Testing
+
+Test database interactions with fixtures:
+
+```python
+class TestMeetingModel:
+    """Test Meeting model."""
+
+    def test_meeting_creation(self, app, test_user_and_org):
+        """Test creating a meeting in the database."""
+        user = test_user_and_org["user"]
+        org = test_user_and_org["org"]
+
+        with app.app_context():
+            meeting = Meeting(
+                m_id=uuid4(),
+                title="Database Test Meeting",
+                org_id=org.org_id,
+                created_by=user.u_id
+            )
+            db.session.add(meeting)
+            db.session.commit()
+
+            retrieved = Meeting.query.get(meeting.m_id)
+            assert retrieved is not None
+            assert retrieved.title == "Database Test Meeting"
+
+    def test_meeting_cascade_delete(self, app, test_user_and_org):
+        """Test cascade delete of related records."""
+        # Test cascade delete behavior
+        pass
+```
+
+### Mocking and Patching
+
+Use mocks to isolate dependencies:
+
+```python
+from unittest.mock import patch, MagicMock
+
+class TestExternalAPI:
+    """Test external API interactions."""
+
+    @patch('app.services.transcription_service.requests.post')
+    def test_transcribe_meeting_success(self, mock_post):
+        """Test successful meeting transcription."""
+        # Mock the external API response
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "transcript": "Meeting transcript text"
+        }
+        mock_post.return_value = mock_response
+
+        # Call the service
+        result = TranscriptionService.transcribe("audio_url")
+
+        # Assertions
+        assert result["transcript"] == "Meeting transcript text"
+        mock_post.assert_called_once()
+
+    @patch('app.services.s3_service.upload_file')
+    def test_upload_recording_failure(self, mock_upload):
+        """Test handling of upload failure."""
+        mock_upload.side_effect = Exception("S3 upload failed")
+
+        with pytest.raises(Exception, match="S3 upload failed"):
+            RecordingService.upload("file_path")
+```
+
+### Performance Tests
+
+Measure performance under load:
+
+```python
+import time
+from tests.utils import PerformanceTestBase
+
+class TestMeetingPerformance(PerformanceTestBase):
+    """Test meeting system performance."""
+
+    def test_bulk_meeting_creation(self, app, test_user_and_org):
+        """Test creating 100 meetings quickly."""
+        org = test_user_and_org["org"]
+        user = test_user_and_org["user"]
+
+        with app.app_context():
+            start_time = time.time()
+
+            for i in range(100):
+                meeting = Meeting(
+                    m_id=uuid4(),
+                    title=f"Meeting {i}",
+                    org_id=org.org_id,
+                    created_by=user.u_id
+                )
+                db.session.add(meeting)
+            db.session.commit()
+
+            elapsed = time.time() - start_time
+
+            # Should complete in less than 2 seconds
+            assert elapsed < 2.0
+```
+
+---
+
+## Frontend Testing (Jest)
+
+### Test Structure
+
+```
+__tests__/
+└── pages/                   # Page component tests
+    ├── index.test.js
+    ├── meeting-detail.test.js
+    └── select-workspace.test.tsx
+```
+
+### Configuration
+
+**jest.config.js**:
+
+```javascript
+const nextJest = require('next/jest')
+
+const createJestConfig = nextJest({
+  dir: './',
+})
+
+const customJestConfig = {
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  testEnvironment: 'jest-environment-jsdom',
+  testPathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/node_modules/'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+  },
+  collectCoverageFrom: [
+    'src/**/*.{js,jsx,ts,tsx}',
+    '!src/**/*.d.ts',
+  ],
+}
+
+module.exports = createJestConfig(customJestConfig)
+```
+
+### Component Testing
+
+Test React components with React Testing Library:
+
+```javascript
+import React from 'react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import MeetingCard from '@/components/MeetingCard'
+
+// Mock dependencies
+jest.mock('next/router', () => ({
+  useRouter: jest.fn(),
+}))
+
+jest.mock('@/services/api', () => ({
+  getMeeting: jest.fn(),
+}))
+
+describe('MeetingCard', () => {
+  const mockMeeting = {
+    id: '123',
+    title: 'Test Meeting',
+    date: '2024-01-15',
+    attendees: ['John Doe', 'Jane Smith']
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('renders meeting information correctly', () => {
+    render(<MeetingCard meeting={mockMeeting} />)
+
+    expect(screen.getByText('Test Meeting')).toBeInTheDocument()
+    expect(screen.getByText('2024-01-15')).toBeInTheDocument()
+  })
+
+  it('calls delete handler when delete button clicked', async () => {
+    const onDelete = jest.fn()
+
+    render(
+      <MeetingCard
+        meeting={mockMeeting}
+        onDelete={onDelete}
+      />
+    )
+
+    const deleteButton = screen.getByRole('button', { name: /delete/i })
+    fireEvent.click(deleteButton)
+
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledWith('123')
+    })
+  })
+
+  it('displays loading state', () => {
+    render(<MeetingCard meeting={null} loading={true} />)
+
+    expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
+  })
+})
+```
+
+### Page Testing
+
+Test Next.js pages:
+
+```javascript
+import { render, screen, waitFor } from '@testing-library/react'
+import HomePage from '@/pages/index'
+
+// Mock API calls
+jest.mock('@/services/api', () => ({
+  getMeetings: jest.fn(() => Promise.resolve([
+    { id: '1', title: 'Meeting 1' },
+    { id: '2', title: 'Meeting 2' }
+  ])),
+}))
+
+// Mock global state
+jest.mock('@/store', () => ({
+  useGlobalState: jest.fn(() => ({
+    user: {
+      u_id: 'user123',
+      u_first_name: 'John',
+      u_last_name: 'Doe',
+    },
+  })),
+}))
+
+describe('HomePage', () => {
+  it('renders list of meetings', async () => {
+    render(<HomePage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Meeting 1')).toBeInTheDocument()
+      expect(screen.getByText('Meeting 2')).toBeInTheDocument()
+    })
+  })
+
+  it('shows empty state when no meetings', async () => {
+    const { getMeetings } = require('@/services/api')
+    getMeetings.mockResolvedValueOnce([])
+
+    render(<HomePage />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/no meetings/i)).toBeInTheDocument()
+    })
+  })
+})
+```
+
+### Hook Testing
+
+Test custom hooks:
+
+```javascript
+import { renderHook, act, waitFor } from '@testing-library/react'
+import useMeeting from '@/hooks/useMeeting'
+
+jest.mock('@/services/api', () => ({
+  getMeeting: jest.fn(),
+}))
+
+describe('useMeeting', () => {
+  it('fetches meeting data successfully', async () => {
+    const mockMeeting = {
+      id: '123',
+      title: 'Test Meeting'
+    }
+
+    const { getMeeting } = require('@/services/api')
+    getMeeting.mockResolvedValueOnce(mockMeeting)
+
+    const { result } = renderHook(() => useMeeting('123'))
+
+    expect(result.current.loading).toBe(true)
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+      expect(result.current.meeting).toEqual(mockMeeting)
+      expect(result.current.error).toBeNull()
+    })
+  })
+
+  it('handles errors correctly', async () => {
+    const { getMeeting } = require('@/services/api')
+    getMeeting.mockRejectedValueOnce(new Error('Not found'))
+
+    const { result } = renderHook(() => useMeeting('123'))
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false)
+      expect(result.current.error).toBe('Not found')
+    })
+  })
+})
+```
+
+### API Testing
+
+Test API route handlers:
+
+```javascript
+import { createMocks } from 'node-mocks-http'
+import handler from '@/pages/api/meetings/[id]'
+
+jest.mock('@/services/meeting-service', () => ({
+  getMeeting: jest.fn(),
+}))
+
+describe('/api/meetings/[id]', () => {
+  it('returns meeting data for valid ID', async () => {
+    const { getMeeting } = require('@/services/meeting-service')
+    getMeeting.mockResolvedValueOnce({
+      id: '123',
+      title: 'Test Meeting'
+    })
+
+    const { req, res } = createMocks({
+      method: 'GET',
+      query: { id: '123' },
+    })
+
+    await handler(req, res)
+
+    expect(res._getStatusCode()).toBe(200)
+    expect(JSON.parse(res._getData())).toEqual({
+      meeting: {
+        id: '123',
+        title: 'Test Meeting'
+      }
+    })
+  })
+
+  it('returns 404 for invalid ID', async () => {
+    const { getMeeting } = require('@/services/meeting-service')
+    getMeeting.mockResolvedValueOnce(null)
+
+    const { req, res } = createMocks({
+      method: 'GET',
+      query: { id: '999' },
+    })
+
+    await handler(req, res)
+
+    expect(res._getStatusCode()).toBe(404)
+  })
+})
+```
+
+---
+
+## Running Tests
+
+### Backend Tests
+
+```bash
+cd backend-meeting-notes
+
+# Run all tests
+python -m pytest
+
+# Run with coverage
+python -m pytest --cov=app --cov-report=html
+
+# Run specific test category
+python -m tests unit
+python -m tests integration
+python -m tests performance
+
+# Run specific test file
+pytest tests/integration/object_system/test_object_system.py
+
+# Run specific test
+pytest tests/integration/object_system/test_object_system.py::TestObjectSystem::test_create_object
+
+# Run with verbose output
+pytest -v
+
+# Stop on first failure
+pytest -x
+
+# Run failed tests only
+pytest --lf
+```
+
+### Frontend Tests
+
+```bash
+cd meeting-notes-dashboard
+
+# Run all tests
+npm test
+
+# Run in watch mode
+npm test -- --watch
+
+# Run with coverage
+npm test -- --coverage
+
+# Run specific test file
+npm test -- index.test.js
+
+# Run tests matching pattern
+npm test -- --testNamePattern="should render"
+
+# Update snapshots
+npm test -- -u
+```
+
+### CI/CD Integration
+
+Tests run automatically on:
+
+- **Pre-commit**: Linting and quick checks
+- **Pre-push**: Full test suite with coverage
+- **Pull Request**: All tests + integration tests
+- **Main Branch**: Full test suite + performance tests
+
+---
+
+## Writing Tests
+
+### Test Naming
+
+**Backend (Python):**
+
+```python
+# Good - descriptive
+def test_create_meeting_with_valid_data_succeeds():
+def test_create_meeting_with_empty_title_raises_error():
+def test_get_meeting_returns_404_when_not_found():
+
+# Bad - vague
+def test_meeting():
+def test_it_works():
+```
+
+**Frontend (TypeScript/JavaScript):**
+
+```javascript
+// Good - descriptive
+it('renders meeting title correctly')
+it('calls delete handler when button clicked')
+it('displays error message when API fails')
+
+// Bad - vague
+it('works')
+it('test the component')
+```
+
+### Test Structure (AAA Pattern)
+
+Follow **Arrange-Act-Assert** pattern:
+
+```python
+def test_update_meeting_title():
+    # Arrange - Set up test data
+    meeting = create_test_meeting(title="Old Title")
+    new_title = "New Title"
+
+    # Act - Execute the function
+    updated = MeetingService.update_title(meeting.id, new_title)
+
+    # Assert - Verify results
+    assert updated.title == new_title
+    assert updated.updated_at is not None
+```
+
+### Test Isolation
+
+Each test should be independent:
+
+```python
+def test_meeting_deletion():
+    # Create fresh data for this test
+    meeting = MeetingFactory()
+    db.session.add(meeting)
+    db.session.commit()
+
+    # Test
+    MeetingService.delete(meeting.id)
+
+    # Verify
+    assert Meeting.query.get(meeting.id) is None
+
+    # Cleanup happens in fixture
+```
+
+### Test Data Factories
+
+Use factory pattern for test data:
+
+```python
+class MeetingFactory:
+    """Factory for creating test meetings."""
+
+    @staticmethod
+    def create(**kwargs):
+        """Create a meeting with default or custom values."""
+        defaults = {
+            'title': 'Test Meeting',
+            'start_time': datetime.now(),
+            'duration': 60
+        }
+        defaults.update(kwargs)
+        return Meeting(**defaults)
+
+# Usage
+meeting = MeetingFactory.create(title="Custom Meeting")
+```
+
+---
+
+## Best Practices
+
+### General Testing Principles
+
+1. **Test Behavior, Not Implementation**
+   ```python
+   # Good - tests behavior
+   def test_meeting_sorts_by_date():
+       meetings = get_meetings(sort='date')
+       assert meetings[0].date <= meetings[1].date
+
+   # Bad - tests implementation
+   def test_meeting_uses_sort_method():
+       assert meeting._sort_method == 'date'
+   ```
+
+2. **One Assertion Per Test**
+   ```python
+   # Good - focused test
+   def test_meeting_has_title():
+       assert meeting.title is not None
+
+   # Good - separate test
+   def test_meeting_has_valid_date():
+       assert meeting.date > datetime.now()
+
+   # Bad - multiple assertions
+   def test_meeting_properties():
+       assert meeting.title
+       assert meeting.date
+       assert meeting.attendees
+   ```
+
+3. **Use Descriptive Test Names**
+   ```python
+   # Good
+   def test_delete_meeting_removes_from_database():
+   def test_delete_meeting_returns_true_on_success():
+   def test_delete_meeting_returns_false_when_not_found():
+
+   # Bad
+   def test_delete_1():
+   def test_delete_2():
+   def test_delete_3():
+   ```
+
+### Backend-Specific
+
+1. **Use Fixtures Effectively**
+   ```python
+   # Good - reusable fixture
+   @pytest.fixture
+   def authenticated_user(client):
+       """Create and log in a user."""
+       user = create_user()
+       token = create_token(user)
+       return {'user': user, 'token': token}
+
+   # Use in tests
+   def test_get_profile(authenticated_user):
+       user = authenticated_user['user']
+       # ...
+   ```
+
+2. **Mock External Services**
+   ```python
+   @patch('app.services.email.send_email')
+   def test_invite_attendees_sends_email(mock_send):
+       invite_attendees(meeting_id, ['user@example.com'])
+       mock_send.assert_called_once()
+   ```
+
+3. **Test Error Cases**
+   ```python
+   def test_invalid_meeting_id_raises_404():
+       response = client.get('/meetings/invalid-id')
+       assert response.status_code == 404
+   ```
+
+### Frontend-Specific
+
+1. **Query by Role, Not Selector**
+   ```javascript
+   // Good
+   const button = screen.getByRole('button', { name: /submit/i })
+
+   // Bad
+   const button = document.querySelector('.btn-primary')
+   ```
+
+2. **Wait for Async Operations**
+   ```javascript
+   // Good
+   await waitFor(() => {
+     expect(screen.getByText('Success')).toBeInTheDocument()
+   })
+
+   // Bad
+   expect(screen.getByText('Success')).toBeInTheDocument()
+   ```
+
+3. **Test User Interactions**
+   ```javascript
+   // Good - tests user behavior
+   fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+
+   // Bad - tests implementation
+   component.handleSubmit()
+   ```
+
+4. **Mock External Dependencies**
+   ```javascript
+   // Good - mock API calls
+   jest.mock('@/services/api', () => ({
+     getMeetings: jest.fn(),
+   }))
+   ```
+
+### Coverage Goals
+
+| Component | Target Coverage |
+|-----------|----------------|
+| Critical Business Logic | 90%+ |
+| API Endpoints | 85%+ |
+| Services | 80%+ |
+| UI Components | 70%+ |
+| Utilities | 90%+ |
+
+---
+
+## Resources
+
+- [pytest Documentation](https://docs.pytest.org/)
+- [React Testing Library](https://testing-library.com/react)
+- [Jest Documentation](https://jestjs.io/)
+- [Backend Test Architecture](https://github.com/your-repo/blob/main/backend-meeting-notes/tests/TEST_ARCHITECTURE.md)
+
+<Note>
+  **Pre-commit Hooks**: Tests run automatically before pushing. Configure them with `pre-commit install` to catch issues early.
+</Note>
+
+<Warning>
+  **Performance Tests**: Only run performance tests locally or in CI. They can be resource-intensive and slow.
+</Warning>

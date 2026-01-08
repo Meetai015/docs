@@ -1,20 +1,20 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Gistly Call Analytics",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#6366f1",
+    "light": "#818cf8",
+    "dark": "#4f46e5"
   },
   "favicon": "/favicon.svg",
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Overview",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
               "index",
               "quickstart",
@@ -22,42 +22,101 @@
             ]
           },
           {
-            "group": "Customization",
+            "group": "MVP",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "mvp/overview",
+              "mvp/features",
+              "mvp/architecture"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "V1 Launch",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "v1-launch"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Frontend",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Setup",
+            "pages": [
+              "frontend/setup",
+              "frontend/configuration"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "frontend/components",
+              "frontend/shadcn",
+              "frontend/styling"
+            ]
+          },
+          {
+            "group": "State & Data",
+            "pages": [
+              "frontend/state-management",
+              "frontend/api-integration"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "frontend/build",
+              "frontend/deployment"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Backend",
+        "groups": [
+          {
+            "group": "Setup",
+            "pages": [
+              "backend/setup",
+              "backend/configuration"
+            ]
+          },
+          {
+            "group": "API",
+            "pages": [
+              "backend/api-overview",
+              "backend/endpoints",
+              "backend/authentication"
+            ]
+          },
+          {
+            "group": "Data",
+            "pages": [
+              "backend/models",
+              "backend/database",
+              "backend/migrations"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "backend/deployment",
+              "backend/monitoring"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "API Documentation",
             "pages": [
               "api-reference/introduction"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Endpoints",
             "pages": [
               "api-reference/endpoint/get",
               "api-reference/endpoint/create",
@@ -66,19 +125,34 @@
             ]
           }
         ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/contributing",
+              "development/code-style",
+              "development/testing"
+            ]
+          },
+          {
+            "group": "Documentation",
+            "pages": [
+              "development/documentation",
+              "development/ai-tools"
+            ]
+          }
+        ]
       }
     ],
     "global": {
       "anchors": [
         {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
+          "anchor": "GitHub",
+          "href": "https://github.com/meetai015",
+          "icon": "github"
         }
       ]
     }
@@ -90,33 +164,30 @@
   "navbar": {
     "links": [
       {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
+        "label": "Dashboard",
+        "href": "https://dashboard.gistly.ai"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "label": "Get Started",
+      "href": "/quickstart"
     }
   },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "cursor",
+      "vscode"
+    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "github": "https://github.com/meetai015"
     }
   }
 }

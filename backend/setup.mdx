@@ -1,0 +1,543 @@
+---
+title: "Backend Setup"
+description: "Set up the Gistly Call Analytics backend development environment"
+icon: "terminal"
+---
+
+# Backend Setup
+
+## Prerequisites
+
+Before setting up the backend, ensure you have the following installed:
+
+- **Python** 3.11 or higher
+- **PostgreSQL** 12+ or 15+ (recommended)
+- **Redis** 6+ (for caching and session management)
+- **pip** (Python package manager)
+- **Git** for version control
+
+<Callout type="info">
+  **Python Version**: The backend is tested with Python 3.11+. Using a version manager like `pyenv` (macOS/Linux) or `py` (Windows) is recommended for managing multiple Python versions.
+</Callout>
+
+## Repository Location
+
+The backend code is in the **`backend-meeting-notes/`** directory at the root of the monorepo.
+
+```bash
+cd backend-meeting-notes
+```
+
+## Installation Steps
+
+### 1. Create Virtual Environment
+
+Create and activate a Python virtual environment to isolate dependencies:
+
+<AccordionGroup>
+  <Accordion icon="terminal" title="macOS/Linux">
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+  </Accordion>
+  <Accordion icon="terminal" title="Windows">
+    ```bash
+    python -m venv venv
+    venv\Scripts\activate
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Callout type="success">
+  **Tip**: Your terminal prompt should change to show `(venv)` indicating the virtual environment is active.
+</Callout>
+
+### 2. Install Dependencies
+
+Install all required Python packages from the requirements file:
+
+```bash
+pip install -r requirements.txt
+```
+
+This will install all required packages including:
+- **Flask 2.3.2** - Web framework
+- **SQLAlchemy 2.0+** - ORM for database operations
+- **Flask-Migrate** - Database migration handling
+- **Flask-JWT-Extended** - JWT authentication
+- **Flask-CORS** - Cross-origin resource sharing
+- **Redis** - Caching layer
+- **OpenAI & LangChain** - AI/ML integrations
+- **Deepgram SDK** - Audio transcription
+- **boto3** - AWS SDK for S3/SQS services
+- **psycopg2-binary** - PostgreSQL adapter
+
+### 3. Environment Variables Configuration
+
+Create a `.env` file in the root of the backend directory:
+
+```bash
+# .env
+
+# Flask Environment
+FLASK_ENV=development
+SECRET_KEY=your-secret-key-here
+JWT_SECRET_KEY=your-jwt-secret-key-here
+
+# Database Configuration
+# Format: postgresql://username:password@localhost:5432/database_name
+SQLALCHEMY_DATABASE_URI=postgresql://postgres:password@localhost:5432/dev_backend_database
+
+# Redis Configuration
+REDIS_URL=redis://localhost:6379/0
+CACHE_ENABLED=true
+CACHE_DEFAULT_TTL=900
+
+# AWS Configuration (for S3, SQS)
+AWS_ACCESS_KEY_ID=your-aws-access-key
+AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+AWS_REGION=ap-south-1
+AWS_S3_BUCKET=your-s3-bucket-name
+
+# OpenAI Configuration (for AI features)
+OPENAI_API_KEY=your-openai-api-key
+
+# Deepgram Configuration (for transcription)
+DEEPGRAM_API_KEY=your-deepgram-api-key
+
+# Google Cloud (optional - for Vertex AI)
+GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
+
+# Frontend URL (for CORS)
+FRONTEND_URL=http://localhost:3000
+```
+
+<Callout type="warning">
+  **Security**: Never commit your `.env` file to version control. The `.gitignore` file is configured to exclude it.
+</Callout>
+
+### 4. Database Setup
+
+#### Create PostgreSQL Database
+
+First, ensure PostgreSQL is running and create the database:
+
+<AccordionGroup>
+  <Accordion icon="terminal" title="Using psql">
+    ```bash
+    # Connect to PostgreSQL
+    psql -U postgres
+
+    # Create database
+    CREATE DATABASE dev_backend_database;
+
+    # Create user (optional)
+    CREATE USER shishirmehto WITH PASSWORD 'password';
+    GRANT ALL PRIVILEGES ON DATABASE dev_backend_database TO shishirmehto;
+
+    # Exit
+    \q
+    ```
+  </Accordion>
+  <Accordion icon="database" title="Using pgAdmin">
+    1. Open pgAdmin and connect to your PostgreSQL server
+    2. Right-click on "Databases" and select "Create > Database"
+    3. Name it `dev_backend_database`
+    4. Save the database
+  </Accordion>
+</AccordionGroup>
+
+#### Run Database Migrations
+
+The backend uses Flask-Migrate (based on Alembic) for database migrations:
+
+<Steps>
+  <Step title="Initialize migrations (first time only)">
+
+  If this is your first time setting up the backend, initialize migrations:
+
+  ```bash
+  flask db init
+  ```
+
+  This creates a `migrations/` directory with migration scripts.
+  </Step>
+
+  <Step title="Create initial migration">
+
+  Generate the initial migration script:
+
+  ```bash
+  flask db migrate -m "Initial migration"
+  ```
+
+  This scans your models in `app/models/` and generates the migration script.
+  </Step>
+
+  <Step title="Apply migrations">
+
+  Apply the migrations to create database tables:
+
+  ```bash
+  flask db upgrade
+  ```
+
+  You should see output indicating tables are being created.
+  </Step>
+
+  <Step title="Verify database">
+
+  Verify that tables were created successfully:
+
+  ```bash
+  psql -U postgres -d dev_backend_database -c "\dt"
+  ```
+
+  You should see a list of tables like `users`, `meetings`, `organizations`, etc.
+  </Step>
+</Steps>
+
+<Callout type="info">
+  **Migration Status**: To check the current migration status, run:
+  ```bash
+  flask db current
+  flask db history
+  ```
+</Callout>
+
+### 5. Start Redis Server
+
+The backend uses Redis for caching. Start the Redis server:
+
+<AccordionGroup>
+  <Accordion icon="terminal" title="macOS (Homebrew)">
+    ```bash
+    brew install redis
+    brew services start redis
+    ```
+  </Accordion>
+  <Accordion icon="terminal" title="Linux (Ubuntu/Debian)">
+    ```bash
+    sudo apt install redis-server
+    sudo systemctl start redis-server
+    ```
+  </Accordion>
+  <Accordion icon="terminal" title="Windows">
+    ```bash
+    # Download Redis for Windows from GitHub releases
+    # Or use WSL on Windows 10/11
+    ```
+  </Accordion>
+</AccordionGroup>
+
+Verify Redis is running:
+
+```bash
+redis-cli ping
+# Should return: PONG
+```
+
+## Running the Development Server
+
+Start the Flask development server:
+
+```bash
+python run.py
+```
+
+The server will start on **http://localhost:8000** (default port).
+
+<Callout type="success">
+  **Success**: You should see output like:
+  ```
+  * Running on http://0.0.0.0:8000
+  * Running on http://127.0.0.1:8000
+  ```
+</Callout>
+
+### Verify the Server is Running
+
+Test the health endpoint:
+
+```bash
+curl http://localhost:8000/
+```
+
+Expected response:
+```json
+{"message": "server running"}
+```
+
+### Using Flask CLI
+
+You can also run the app using Flask CLI:
+
+```bash
+export FLASK_APP=run.py
+export FLASK_ENV=development
+flask run --port=8000
+```
+
+## Project Structure
+
+```
+backend-meeting-notes/
+├── app/
+│   ├── __init__.py          # Flask app factory & configuration
+│   ├── config.py            # Environment-specific configs
+│   ├── models/              # SQLAlchemy database models
+│   │   ├── user.py
+│   │   ├── meeting.py
+│   │   ├── organization.py
+│   │   └── ...
+│   ├── routes/              # API blueprint routes
+│   │   ├── user_routes.py
+│   │   ├── meeting_routes.py
+│   │   ├── auth_routes.py
+│   │   └── ...
+│   ├── services/            # Business logic layer
+│   │   ├── auth_service.py
+│   │   ├── meeting_service.py
+│   │   └── ...
+│   ├── middleware/          # Custom middleware
+│   │   └── auth.py
+│   ├── utils/               # Utility functions
+│   ├── constants/           # Application constants
+│   └── extensions.py        # Flask extensions (db, migrate, etc.)
+├── migrations/              # Database migration files
+│   └── versions/
+├── tests/                   # Unit and integration tests
+│   ├── test_auth.py
+│   ├── test_meetings.py
+│   └── ...
+├── indexer/                 # Audio indexing & processing
+├── call-postprocess/        # Post-processing logic
+├── requirements.txt         # Python dependencies
+├── run.py                   # Application entry point
+├── .env                     # Environment variables (not in git)
+└── pyproject.toml          # Project configuration (linting, etc.)
+```
+
+## Configuration Classes
+
+The backend supports multiple environments through configuration classes in `app/config.py`:
+
+| Environment | Class | Description |
+|------------|-------|-------------|
+| **Development** | `DevelopmentConfig` | Local development with debug mode |
+| **Production** | `ProductionConfig` | Production-optimized settings |
+| **Staging** | `StagingConfig` | Staging environment configuration |
+| **Testing** | `TestingConfig` | Isolated test database configuration |
+
+Set the environment using the `FLASK_ENV` variable in your `.env` file.
+
+## Common Issues and Troubleshooting
+
+### Database Connection Errors
+
+<AccordionGroup>
+  <Accordion title="Error: connection to server at "localhost" (::1), port 5432 failed">
+
+    **Cause**: PostgreSQL is not running or not configured to accept connections.
+
+    **Solution**:
+    ```bash
+    # macOS (Homebrew)
+    brew services start postgresql
+
+    # Linux
+    sudo systemctl start postgresql
+
+    # Windows
+    # Start PostgreSQL from Services or pgAdmin
+    ```
+  </Accordion>
+
+  <Accordion title="Error: database "dev_backend_database" does not exist">
+
+    **Cause**: Database hasn't been created yet.
+
+    **Solution**:
+    ```bash
+    psql -U postgres -c "CREATE DATABASE dev_backend_database;"
+    ```
+  </Accordion>
+
+  <Accordion title="Error: FATAL: password authentication failed for user">
+
+    **Cause**: Incorrect password or user doesn't exist.
+
+    **Solution**: Update the `SQLALCHEMY_DATABASE_URI` in your `.env` file with the correct credentials.
+  </Accordion>
+</AccordionGroup>
+
+### Redis Connection Errors
+
+<AccordionGroup>
+  <Accordion title="Error: Error 111 connecting to Redis: Connection refused">
+
+    **Cause**: Redis server is not running.
+
+    **Solution**:
+    ```bash
+    # macOS
+    brew services start redis
+
+    # Linux
+    sudo systemctl start redis-server
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Python Dependencies Issues
+
+<AccordionGroup>
+  <Accordion title="Error: ModuleNotFoundError: No module named 'flask'">
+
+    **Cause**: Virtual environment is not activated or dependencies not installed.
+
+    **Solution**:
+    ```bash
+    # Ensure virtual environment is activated
+    source venv/bin/activate  # macOS/Linux
+    venv\Scripts\activate     # Windows
+
+    # Reinstall dependencies
+    pip install -r requirements.txt
+    ```
+  </Accordion>
+
+  <Accordion title="Error: psycopg2 binary installation fails">
+
+    **Cause**: Missing PostgreSQL development headers.
+
+    **Solution**:
+    ```bash
+    # macOS
+    brew install postgresql
+
+    # Ubuntu/Debian
+    sudo apt install libpq-dev
+
+    # Then reinstall
+    pip install psycopg2-binary
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Port Already in Use
+
+If port 8000 is already in use:
+
+<AccordionGroup>
+  <Accordion icon="terminal" title="Find and kill the process (macOS/Linux)">
+    ```bash
+    # Find the process
+    lsof -i :8000
+
+    # Kill it (replace PID with actual process ID)
+    kill -9 PID
+    ```
+  </Accordion>
+  <Accordion icon="terminal" title="Use a different port">
+    Modify `run.py` to use a different port:
+    ```python
+    port = int(os.environ.get("PORT", 8001))  # Change to 8001
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Migration Issues
+
+<AccordionGroup>
+  <Accordion title="Error: Target database is not up to date">
+
+    **Cause**: Database schema is out of sync with migrations.
+
+    **Solution**:
+    ```bash
+    # Check current migration version
+    flask db current
+
+    # Upgrade to latest migration
+    flask db upgrade
+    ```
+  </Accordion>
+
+  <Accordion title="Error: There is no current migration">
+
+    **Cause**: Migration system not initialized.
+
+    **Solution**:
+    ```bash
+    # Initialize migrations (first time only)
+    flask db init
+
+    # Create initial migration
+    flask db migrate -m "Initial migration"
+
+    # Apply migration
+    flask db upgrade
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Development Workflow
+
+### Running Tests
+
+The backend uses `pytest` for testing:
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_auth.py
+
+# Run with coverage
+pytest --cov=app tests/
+```
+
+### Code Quality
+
+The project includes tools for code quality:
+
+```bash
+# Run linter (ruff)
+ruff check .
+
+# Format code (black)
+black .
+
+# Type checking (mypy)
+mypy app/
+```
+
+### Adding New Models
+
+When creating new database models:
+
+1. Create model in `app/models/your_model.py`
+2. Import in `app/models/__init__.py`
+3. Generate migration:
+   ```bash
+   flask db migrate -m "Add YourModel"
+   ```
+4. Review the generated migration in `migrations/versions/`
+5. Apply migration:
+   ```bash
+   flask db upgrade
+   ```
+
+## Next Steps
+
+- Explore [API Reference](/api-reference) for available endpoints
+- Configure [Environment Variables](#3-environment-variables-configuration) for your needs
+- Set up the [Frontend](/frontend/setup) to interact with the backend
+- Review [Development Guide](/development) for best practices
+
+<Callout type="info">
+  **Need Help?** Check the [README](https://github.com/your-org/gistly-call-analytics) or open an issue on GitHub.
+</Callout>

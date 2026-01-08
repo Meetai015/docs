@@ -1,0 +1,92 @@
+---
+title: "MVP Features"
+description: "Detailed list of features in the Gistly Call Analytics MVP"
+icon: "list"
+---
+
+# MVP Features
+
+## Meeting Management
+
+### Recording & Transcription
+- **Multi-channel recording** - Support for Zoom, Google Meet, phone calls
+- **Real-time transcription** - Live transcription during meetings
+- **Speaker identification** - Distinguish between different participants
+- **Storage management** - Secure audio and transcript storage
+
+### Meeting Processing
+- **Post-meeting analysis** - Automatic AI analysis after calls end
+- **Batch processing** - Process multiple meetings in parallel
+- **Retry logic** - Handle failures gracefully with automatic retries
+- **Webhook notifications** - Notify external systems of processing completion
+
+## Analytics & Reporting
+
+### Red Flag Analysis
+- **Automated detection** - AI identifies potential issues and concerns
+- **Severity scoring** - Classify flags by severity level
+- **Categorization** - Group flags by type (pricing, product, competition, etc.)
+- **Trend tracking** - Monitor red flag patterns over time
+
+### Reports
+- **Meeting reports** - Individual call summaries and insights
+- **Red flag reports** - Consolidated view of all concerns
+- **Trend analysis** - Track metrics across time periods
+- **CSV export** - Download reports for external analysis
+
+### Dashboard
+- **Meeting timeline** - Visual representation of call history
+- **Red flag overview** - Summary of detected issues
+- **Performance metrics** - Team and individual statistics
+- **Filtering & search** - Find meetings by various criteria
+
+## Lead & CRM Integration
+
+### Lead Processing
+- **Automatic lead creation** - Generate leads from meetings
+- **Attribute mapping** - Map conversation data to lead fields
+- **Batch updates** - Process multiple leads efficiently
+- **Validation** - Ensure data quality before creation
+
+### CRM Integrations
+- **Attio integration** - Two-way sync with Attio CRM
+- **Custom webhooks** - Push data to external systems
+- **Field mapping** - Configure custom field mappings
+- **Sync history** - Track all integration activities
+
+## Organization & User Management
+
+### Multi-tenancy
+- **Organization isolation** - Complete data separation between orgs
+- **Role-based access** - Admin, member, and viewer roles
+- **Team management** - Organize users into teams
+- **Permission controls** - Granular access to features
+
+### User Features
+- **Authentication** - Secure login with JWT tokens
+- **Profile management** - User settings and preferences
+- **Activity tracking** - Audit log of user actions
+- **Password management** - Secure password reset flows
+
+## Technical Features
+
+### API
+- **RESTful endpoints** - Standard HTTP methods with proper status codes
+- **OpenAPI documentation** - Interactive API docs
+- **Rate limiting** - Prevent abuse and ensure fair usage
+- **Webhook support** - Real-time notifications for events
+
+### Infrastructure
+- **CI/CD pipelines** - Automated testing and deployment
+- **Environment management** - Staging and production environments
+- **Monitoring** - Error tracking with Sentry
+- **Logging** - Comprehensive application logs
+- **Database migrations** - Version-controlled schema changes
+
+## Security
+
+- **Data encryption** - Encrypt sensitive data at rest and in transit
+- **API authentication** - JWT-based API access
+- **CORS configuration** - Control cross-origin requests
+- **Input validation** - Sanitize all user inputs
+- **SQL injection prevention** - Parameterized queries throughout

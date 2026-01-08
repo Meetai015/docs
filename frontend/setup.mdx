@@ -1,0 +1,156 @@
+---
+title: "Frontend Setup"
+description: "Set up the Gistly Call Analytics frontend development environment"
+icon: "terminal"
+---
+
+# Frontend Setup
+
+## Prerequisites
+
+Before setting up the frontend, ensure you have:
+
+- **Node.js** 20+ (LTS version recommended)
+- **npm** or **yarn** package manager
+- **Git** for version control
+
+<Callout type="info">
+Node.js version managers like `nvm` or `fnm` are recommended for managing multiple Node.js versions.
+</Callout>
+
+## Repository Location
+
+The frontend code is in the **`meeting-notes-dashboard/`** directory at the root of the monorepo.
+
+```bash
+cd meeting-notes-dashboard
+```
+
+## Installation Steps
+
+### 1. Install Dependencies
+
+```bash
+npm install
+# or
+yarn install
+```
+
+This will install all required packages including:
+- Next.js framework
+- React and related libraries
+- shadcn/ui components
+- TypeScript and dev tools
+
+### 2. Environment Variables
+
+Create a `.env.local` file in the root of the frontend directory:
+
+```bash
+# .env.local
+
+# Backend API URL
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+
+# Authentication (if using auth providers)
+NEXT_PUBLIC_AUTH_DOMAIN=your-domain.auth0.com
+NEXT_PUBLIC_AUTH_CLIENT_ID=your-client-id
+
+# Sentry (for error tracking)
+NEXT_PUBLIC_SENTRY_DSN=your-sentry-dsn
+
+# Feature flags
+NEXT_PUBLIC_ENABLE_ANALYTICS=true
+```
+
+### 3. Database Setup (Optional)
+
+If you need to run the frontend with a local database:
+
+1. Ensure PostgreSQL is running locally
+2. Run the backend (see [Backend Setup](/backend/setup))
+3. The frontend will connect to the backend API
+
+## Running the Development Server
+
+Start the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+```
+
+The application will be available at **http://localhost:3000**
+
+<Steps>
+### Step 1: Verify Installation
+
+Open your browser and navigate to `http://localhost:3000`. You should see the Gistly dashboard.
+
+### Step 2: Test API Connection
+
+Login or access a protected route to verify the frontend can communicate with the backend.
+
+### Step 3: Check Hot Reload
+
+Make a change to any component file. The browser should automatically reload with your changes.
+
+</Steps>
+
+## Project Structure
+
+```
+meeting-notes-dashboard/
+├── public/              # Static assets
+├── src/
+│   ├── app/            # Next.js app router pages
+│   │   ├── (auth)/     # Auth routes (login, signup)
+│   │   ├── (dashboard)/# Protected dashboard routes
+│   │   └── api/        # API route handlers
+│   ├── components/     # Reusable components
+│   │   ├── ui/        # shadcn/ui base components
+│   │   ├── forms/     # Form components
+│   │   └── layouts/   # Layout wrappers
+│   ├── lib/           # Utilities
+│   │   ├── api.ts     # API client
+│   │   ├── auth.ts    # Auth utilities
+│   │   └── utils.ts   # Helper functions
+│   └── types/         # TypeScript types
+├── .env.local         # Environment variables
+├── next.config.js     # Next.js config
+├── tailwind.config.js # Tailwind CSS config
+└── tsconfig.json      # TypeScript config
+```
+
+## Common Issues
+
+### Port Already in Use
+
+If port 3000 is already in use:
+
+```bash
+npm run dev -- -p 3001
+```
+
+### Module Not Found Errors
+
+If you encounter module resolution errors:
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+### TypeScript Errors
+
+If TypeScript shows errors in VS Code:
+
+1. Ensure you have the latest TypeScript extension
+2. Restart the TypeScript server: `Cmd+Shift+P` → "TypeScript: Restart TS Server"
+
+## Next Steps
+
+- Configure [Frontend Settings](/frontend/configuration)
+- Learn about [Components](/frontend/components)
+- Set up [Backend](/backend/setup)

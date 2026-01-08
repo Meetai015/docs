@@ -1,0 +1,471 @@
+---
+title: "Authentication"
+description: "JWT authentication, role-based access control (RBAC), and user permissions"
+icon: "lock"
+---
+
+# Authentication
+
+The Gistly Call Analytics backend implements a comprehensive authentication and authorization system using JWT (JSON Web Tokens) and Role-Based Access Control (RBAC).
+
+## JWT Authentication with Flask-JWT-Extended
+
+### Overview
+
+The backend uses **Flask-JWT-Extended** for JWT-based authentication:
+
+- **Token-based**: Stateless authentication using JWT tokens
+- **Long-lived sessions**: 7-day token expiration
+- **Header-based**: Tokens passed via Authorization header
+- **Secure**: Signed with secret key
+
+### JWT Configuration
+
+JWT is configured in `/backend-meeting-notes/run.py`:
+
+```python
+from flask_jwt_extended import JWTManager
+
+jwt = JWTManager(application)
+```
+
+Configuration in app factory:
+
+```python
+app.config["JWT_SECRET_KEY"] = "meeting_notes_backend_secret_key"
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=7)
+```
+
+### Token Structure
+
+JWT tokens contain the following claims:
+
+```json
+{
+  "sub": "user_id",
+  "exp": 1234567890,
+  "iat": 1234567890,
+  "jti": "unique_token_id"
+}
+```
+
+### Authentication Flow
+
+#### 1. User Login
+
+```python
+from flask_jwt_extended import create_access_token
+
+def login(email, password):
+    user = User.query.filter_by(u_email=email).first()
+
+    if user and user.check_password(password):
+        access_token = create_access_token(identity=user.u_id)
+        return {
+            "access_token": access_token,
+            "user_id": user.u_id,
+            "email": user.u_email
+        }
+    return None
+```
+
+#### 2. Token Validation
+
+Tokens are validated on each protected request:
+
+```python
+from flask_jwt_extended import jwt_required, get_jwt_identity
+
+@app.route("/protected")
+@jwt_required()
+def protected():
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+    return jsonify({"user_id": user.u_id})
+```
+
+#### 3. Token in Requests
+
+Clients include the token in the Authorization header:
+
+```
+Authorization: Bearer <access_token>
+```
+
+### Authentication Middleware
+
+The backend implements custom authentication middleware in `/backend-meeting-notes/app/middleware/auth.py`:
+
+```python
+def init_auth_middleware(app):
+    @app.before_request
+    def auth_middleware():
+        if not hasattr(g, "user_model"):
+            g.user_model = None
+        if not hasattr(g, "user_permissions"):
+            g.user_permissions = {}
+
+        if g.user_model is not None:
+            user = {"user_model": g.user_model, "user_id": g.user_model.u_id}
+            g.user_permissions = get_user_permissions(user)
+```
+
+## Role-Based Access Control (RBAC)
+
+### Overview
+
+The backend implements a sophisticated RBAC system with:
+
+- **Roles**: Predefined user roles (Admin, User, etc.)
+- **Permissions**: Granular permissions per feature category
+- **Categories**: Feature groups (user_management, team_management, call_details)
+- **Access Levels**: Full access, View access, No access
+
+### Permission Categories
+
+#### 1. User Management
+
+Controls access to user profile and role management:
+
+| Permission | Description | Allowed Methods |
+|------------|-------------|-----------------|
+| Full access | Invite, create, and manage users and roles | GET, POST, PUT, DELETE |
+| View access | View user profiles and roles | GET |
+| No access | No access to user management | - |
+
+#### 2. Team Management
+
+Controls access to team creation and management:
+
+| Permission | Description | Allowed Methods |
+|------------|-------------|-----------------|
+| Full access | Create, assign, and manage teams | GET, POST, PUT, DELETE |
+| View access | View teams and members | GET |
+| No access | No access to team management | - |
+
+#### 3. Call Details
+
+Controls access to meeting/call data:
+
+| Permission | Description | Allowed Methods |
+|------------|-------------|-----------------|
+| Full access | Edit, update, upload, and view all calls | GET, POST, PUT, DELETE |
+| View access | View own call details only | GET |
+| No access | No access to call details | - |
+
+### User Roles
+
+#### Admin Role
+
+```python
+ADMIN_USER_PERMISSIONS = {
+    "admin": {
+        "categories": [
+            {"name": "user_management", "permission": "Full access"},
+            {"name": "team_management", "permission": "Full access"},
+            {"name": "call_details", "permission": "Full access"},
+        ]
+    }
+}
+```
+
+**Capabilities:**
+- Full access to all features
+- Can manage users and roles
+- Can manage teams
+- Can view and edit all calls
+
+#### Standard User Role
+
+```python
+ADMIN_USER_PERMISSIONS = {
+    "user": {
+        "categories": [
+            {"name": "user_management", "permission": "No access"},
+            {"name": "team_management", "permission": "No access"},
+            {"name": "call_details", "permission": "View access"},
+        ]
+    }
+}
+```
+
+**Capabilities:**
+- View own call details only
+- No management access
+
+### Permission Checking
+
+The permission system is implemented in `/backend-meeting-notes/app/services/permission_services.py`:
+
+#### Get User Permissions
+
+```python
+def get_user_permissions(user):
+    """Retrieve user permissions from their assigned roles."""
+    user_model = user.get("user_model")
+    user_id = user.get("user_id")
+
+    # Get user's roles
+    u_roles = db.session.execute(
+        db.select(Role)
+        .join(user_roles, Role.r_id == user_roles.c.r_id)
+        .where(user_roles.c.u_id == user_id)
+        .limit(1)
+    ).scalars().first()
+
+    # Extract permissions from role
+    r_permissions = u_roles.r_permissions
+    user_permissions = {u_roles.r_name: r_permissions}
+
+    return user_permissions
+```
+
+#### Check Authorization
+
+```python
+def is_authorized(user_permissions, path):
+    """Check if user is authorized to access a specific endpoint."""
+    from flask import request
+    method = request.method
+
+    # Free APIs don't require permissions
+    if is_free_api(path):
+        return True
+
+    # Check each role and category
+    for user_role, role_info in user_permissions.items():
+        for category_info in role_info["categories"]:
+            category = category_info["name"]
+            permission = category_info["permission"]
+
+            if category in API_PERMISSIONS:
+                for endpoint in API_PERMISSIONS[category]["endpoints"]:
+                    if path_matches(endpoint["path"], path):
+                        allowed_methods = PERMISSION_RULES[category].get(permission, [])
+
+                        if method in allowed_methods or "*" in allowed_methods:
+                            return True
+
+    return False
+```
+
+### Call Access Control
+
+The system implements sophisticated call-level access control:
+
+```python
+def can_access_call(user_permissions, user_id, call_owner_user_id):
+    """
+    Check if a user can access a specific call.
+
+    Returns: (can_view: bool, can_edit: bool, error_message: str or None)
+    """
+    user_mgmt = get_permission_level(user_permissions, "user_management")
+    team_mgmt = get_permission_level(user_permissions, "team_management")
+    call_details = get_permission_level(user_permissions, "call_details")
+
+    # Check if user can edit
+    can_edit = call_details == "Full access"
+
+    # Check if call_details permission allows viewing
+    if call_details == "No access":
+        return False, False, "You do not have permission to access call details"
+
+    # Determine view access based on user_mgmt and team_mgmt
+    can_view = False
+
+    if user_mgmt == "Full access":
+        can_view = True
+    elif user_mgmt == "View access":
+        if team_mgmt == "Full access":
+            can_view = True
+        elif team_mgmt == "View access":
+            # Can view team members' calls
+            team_member_ids = Team.get_member_ids_for_user(user_id)
+            if str(call_owner_user_id) in [str(m_id) for m_id in team_member_ids]:
+                can_view = True
+        elif team_mgmt == "No access":
+            # Can view own calls only
+            if str(user_id) == str(call_owner_user_id):
+                can_view = True
+
+    return can_view, can_edit, None
+```
+
+### Access Matrix
+
+| User Management | Team Management | Can View Calls | Can Edit Calls |
+|----------------|-----------------|----------------|----------------|
+| Full | Full | All calls | Yes |
+| Full | View | All calls | Yes |
+| Full | None | All calls | Yes |
+| View | Full | All calls | Yes |
+| View | View | Team calls | Yes |
+| View | None | Own calls | Yes |
+| None | Full | All calls | Yes |
+| None | View | Team calls | Yes |
+| None | None | Own calls | Yes |
+
+## API Endpoint Permissions
+
+### Protected Endpoints
+
+Protected endpoints are defined in `/backend-meeting-notes/app/constants/permission_constants.py`:
+
+#### Team Management Endpoints
+
+```python
+"team_management": {
+    "endpoints": [
+        {"path": "/teams", "methods": ["GET", "POST"]},
+        {"path": "/teams/<team_id>", "methods": ["GET"]},
+        {"path": "/teams/manager/<action>", "methods": ["POST"]},
+        {"path": "/teams/member/<action>", "methods": ["POST"]},
+        {"path": "/teams/update/<team_id>", "methods": ["PUT"]},
+        {"path": "/teams/delete/<team_id>", "methods": ["DELETE"]},
+    ]
+}
+```
+
+#### Call Details Endpoints
+
+```python
+"call_details": {
+    "endpoints": [
+        {"path": "/meetings", "methods": ["GET", "POST"]},
+        {"path": "/meetings/<meeting_id>", "methods": ["GET"]},
+        {"path": "/meetings/delete", "methods": ["DELETE"]},
+        {"path": "/meetings/all", "methods": ["GET", "POST"]},
+        {"path": "/transcription/meeting", "methods": ["GET"]},
+        {"path": "/summaries/summary/get", "methods": ["GET"]},
+    ]
+}
+```
+
+### Free Endpoints
+
+Some endpoints don't require authentication (defined by absence from `API_PERMISSIONS`):
+
+```python
+def is_free_api(path):
+    """Check if the given path is not present in API_PERMISSIONS."""
+    for category_info in API_PERMISSIONS.values():
+        for endpoint in category_info["endpoints"]:
+            if endpoint["path"] == path:
+                return False
+    return True
+```
+
+## Special Cases
+
+### View Access with POST
+
+Some endpoints use POST for technical reasons (large payloads) but should allow view-only access:
+
+```python
+VIEW_ACCESS_POST_ENDPOINTS = [
+    "/meetings/all",  # Allows POST for large agent filter lists
+]
+```
+
+### Dynamic Path Parameters
+
+The permission system handles dynamic path parameters:
+
+```python
+def path_matches(endpoint_path, request_path):
+    """Match paths with dynamic parameters."""
+    path_parts = request_path.split("/")
+    endpoint_parts = endpoint_path.split("/")
+
+    if len(path_parts) == len(endpoint_parts):
+        matches = True
+        for i, part in enumerate(endpoint_parts):
+            # Skip comparison for dynamic parts (enclosed in <>)
+            if "<" in part and ">" in part:
+                continue
+            if part != path_parts[i]:
+                matches = False
+                break
+        return matches
+    return False
+```
+
+## Security Best Practices
+
+### 1. Secret Key Management
+
+- **Never commit** secret keys to version control
+- Use environment variables for secret keys
+- Rotate secret keys periodically
+- Use strong, random secrets (32+ bytes)
+
+### 2. Token Expiration
+
+- Default: 7 days for user convenience
+- Consider shorter expiration for sensitive operations
+- Implement refresh tokens for better security
+- Store tokens securely (httpOnly cookies)
+
+### 3. HTTPS Only
+
+- **Always use HTTPS** in production
+- Tokens transmitted over HTTPS are encrypted
+- Never transmit tokens over HTTP
+
+### 4. Token Storage (Client-side)
+
+Recommended approaches:
+
+- **httpOnly cookies**: Most secure, prevents XSS
+- **Session storage**: Convenient, vulnerable to XSS
+- **Local storage**: Not recommended for sensitive tokens
+
+### 5. Permission Validation
+
+- **Always validate** permissions on the server-side
+- Never rely on client-side permission checks
+- Implement defense in depth (middleware + endpoint checks)
+
+## Troubleshooting
+
+### JWT Token Not Validating
+
+**Error**: `Invalid header`
+
+**Solution**:
+1. Ensure `Authorization: Bearer <token>` format
+2. Check token hasn't expired
+3. Verify `JWT_SECRET_KEY` matches between generation and validation
+4. Ensure token is not tampered with
+
+### Permission Denied Unexpectedly
+
+**Error**: `You are not authorized to access this feature`
+
+**Solution**:
+1. Check user has role assigned
+2. Verify role has correct permissions
+3. Ensure endpoint is in `API_PERMISSIONS`
+4. Check HTTP method matches allowed methods
+5. Verify path matches exactly (case-sensitive)
+
+### User Not in Flask Context
+
+**Error**: `g.user_model is None`
+
+**Solution**:
+1. Ensure authentication middleware is initialized
+2. Check JWT token is being sent
+3. Verify `@jwt_required()` decorator on protected endpoints
+4. Ensure middleware runs before endpoint handler
+
+### Role Permissions Not Loading
+
+**Error**: `User has no roles assigned`
+
+**Solution**:
+1. Check user_roles table has mapping
+2. Verify Role exists for the user
+3. Ensure `r_permissions` column is valid JSON
+4. Check database connection is working

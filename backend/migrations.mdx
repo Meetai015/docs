@@ -1,0 +1,425 @@
+---
+title: "Migrations"
+description: "Database migrations with Flask-Migrate and Alembic"
+icon: "database"
+---
+
+# Database Migrations
+
+## Overview
+
+Gistly uses **Flask-Migrate** (Alembic) for database migrations. Migrations allow you to version-control your database schema and apply changes incrementally.
+
+## Migration Workflow
+
+<Steps>
+### Step 1: Generate Migration
+
+After modifying models, create a new migration:
+
+```bash
+# In backend-meeting-notes/
+flask db migrate -m "Description of changes"
+```
+
+This generates a migration file in `migrations/versions/` based on model changes.
+
+### Step 2: Review Migration
+
+Review the generated migration file to ensure correctness:
+
+```python
+# migrations/versions/12345_description.py
+from alembic import op
+import sqlalchemy as sa
+
+def upgrade():
+    # Apply changes
+    op.create_table('new_table',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.PrimaryKeyConstraint('id')
+    )
+
+def downgrade():
+    # Reverse changes
+    op.drop_table('new_table')
+```
+
+### Step 3: Apply Migration
+
+Apply the migration to the database:
+
+```bash
+flask db upgrade
+```
+
+### Step 4: Verify
+
+Verify the migration was successful:
+
+```bash
+# Check current version
+flask db current
+
+# View migration history
+flask db history
+```
+
+</Steps>
+
+## Migration Commands
+
+### Basic Commands
+
+| Command | Description |
+|---------|-------------|
+| `flask db init` | Initialize migration repository |
+| `flask db migrate -m "message"` | Create new migration |
+| `flask db upgrade` | Apply pending migrations |
+| `flask db downgrade` | Revert last migration |
+| `flask db current` | Show current version |
+| `flask db history` | Show migration history |
+| `flask db heads` | Show latest versions |
+| `flask db branches` | Show migration branches |
+
+### Advanced Commands
+
+```bash
+# Create migration with SQL generation (no execution)
+flask db migrate --sql -m "description"
+
+# Apply specific migration
+flask db upgrade <revision>
+
+# Revert to specific revision
+flask db downgrade <revision>
+
+# Stamp database with specific revision (no execution)
+flask db stamp <revision>
+
+# Merge migration branches
+flask db merge -m "merge message" <revision1> <revision2>
+```
+
+## Migration Best Practices
+
+### 1. Review Before Applying
+
+Always review generated migrations before applying:
+
+```bash
+# Generate migration
+flask db migrate -m "Add user preferences"
+
+# Review the file
+cat migrations/versions/12345_add_user_preferences.py
+
+# Then apply
+flask db upgrade
+```
+
+### 2. Use Descriptive Messages
+
+```bash
+# Good
+flask db migrate -m "Add user_preferences table with timezone and theme columns"
+
+# Bad
+flask db migrate -m "Update stuff"
+```
+
+### 3. Test Downgrades
+
+Always ensure your migrations can be reversed:
+
+```bash
+# Apply migration
+flask db upgrade
+
+# Test downgrade
+flask db downgrade
+
+# Re-apply
+flask db upgrade
+```
+
+### 4. Handle Data Migrations
+
+For data changes, useAlembic operations:
+
+```python
+from alembic import op
+import sqlalchemy as sa
+
+def upgrade():
+    # Add column
+    op.add_column('users', sa.Column('status', sa.String(), nullable=True))
+
+    # Migrate data
+    op.execute("UPDATE users SET status = 'active' WHERE status IS NULL")
+
+    # Make column non-nullable
+    op.alter_column('users', 'status', nullable=False)
+
+def downgrade():
+    op.drop_column('users', 'status')
+```
+
+## Common Migration Scenarios
+
+### Adding a New Table
+
+```python
+def upgrade():
+    op.create_table(
+        'notifications',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('user_id', sa.Integer(), nullable=False),
+        sa.Column('message', sa.Text(), nullable=False),
+        sa.Column('created_at', sa.DateTime(), nullable=True),
+        sa.ForeignKeyConstraint(['user_id'], ['users.u_id']),
+        sa.PrimaryKeyConstraint('id')
+    )
+
+def downgrade():
+    op.drop_table('notifications')
+```
+
+### Adding a Column
+
+```python
+def upgrade():
+    op.add_column(
+        'users',
+        sa.Column('timezone', sa.String(), nullable=True)
+    )
+
+def downgrade():
+    op.drop_column('users', 'timezone')
+```
+
+### Renaming a Column
+
+```python
+def upgrade():
+    op.alter_column(
+        'users',
+        'u_name',
+        new_column_name='u_full_name'
+    )
+
+def downgrade():
+    op.alter_column(
+        'users',
+        'u_full_name',
+        new_column_name='u_name'
+    )
+```
+
+### Adding an Index
+
+```python
+def upgrade():
+    op.create_index(
+        'ix_meetings_m_start_time',
+        'meetings',
+        ['m_start_time']
+    )
+
+def downgrade():
+    op.drop_index('ix_meetings_m_start_time', table_name='meetings')
+```
+
+### Changing Column Type
+
+```python
+def upgrade():
+    op.alter_column(
+        'meetings',
+        'm_duration',
+        type_=sa.Integer(),
+        existing_type=sa.Float()
+    )
+
+def downgrade():
+    op.alter_column(
+        'meetings',
+        'm_duration',
+        type_=sa.Float(),
+        existing_type=sa.Integer()
+    )
+```
+
+## Troubleshooting
+
+### Migration Conflicts
+
+If multiple developers create migrations:
+
+```bash
+# Merge conflicting migrations
+flask db merge -m "Merge branch migrations" <revision1> <revision2>
+
+# Resolve conflicts in the merged file
+# Apply merged migration
+flask db upgrade
+```
+
+### Migration State Issues
+
+If the database state doesn't match migrations:
+
+```bash
+# Check current state
+flask db current
+
+# Stamp to specific revision (use carefully!)
+flask db stamp head
+```
+
+### Lost Migration
+
+If a migration file was deleted:
+
+```bash
+# Create a placeholder migration
+flask db revision -m "Recreate lost migration"
+
+# Manually edit the file to match the database state
+# Then stamp to current
+flask db stamp head
+```
+
+## Environment-Specific Migrations
+
+### Development
+
+```bash
+# Apply to local development database
+export FLASK_ENV=development
+flask db upgrade
+```
+
+### Staging
+
+```bash
+# Apply to staging database
+export FLASK_ENV=staging
+flask db upgrade
+```
+
+### Production
+
+<Warning>
+Always backup production databases before applying migrations!
+</Warning>
+
+```bash
+# 1. Backup database
+pg_dump gistly_prod > backup.sql
+
+# 2. Review migration
+cat migrations/versions/12345_migration.py
+
+# 3. Test on staging first
+flask db upgrade
+
+# 4. Apply to production
+export FLASK_ENV=production
+flask db upgrade
+
+# 5. Verify application works
+```
+
+## Migration Workflow with Git
+
+### Recommended Workflow
+
+```bash
+# 1. Create feature branch
+git checkout -b feature/add-notifications
+
+# 2. Make model changes
+# Edit models/
+
+# 3. Generate migration
+flask db migrate -m "Add notifications table"
+
+# 4. Test migration
+flask db upgrade
+flask db downgrade
+flask db upgrade
+
+# 5. Commit both model and migration
+git add app/models/ migrations/versions/
+git commit -m "Add notifications table"
+
+# 6. Push and create PR
+git push origin feature/add-notifications
+```
+
+### Handling Merge Conflicts
+
+```bash
+# After merge, resolve migration conflicts
+flask db merge -m "Merge migrations" <rev1> <rev2>
+
+# Test the merged migration
+flask db upgrade
+flask db downgrade
+
+# Commit the merge
+git add migrations/versions/
+git commit -m "Merge migration conflicts"
+```
+
+## Data Integrity
+
+### Using Transactions
+
+Migrations run in transactions by default. For multi-statement migrations:
+
+```python
+from alembic import op
+
+def upgrade():
+    # All operations run in one transaction
+    op.create_table('new_table', ...)
+    op.add_column('table', ...)
+    # If any fails, all are rolled back
+```
+
+### Bulk Data Operations
+
+For large data migrations:
+
+```python
+from alembic import op
+import sqlalchemy as sa
+
+def upgrade():
+    # Process in batches
+    connection = op.get_bind()
+    offset = 0
+    batch_size = 1000
+
+    while True:
+        result = connection.execute(
+            sa.text("""
+                UPDATE users
+                SET status = 'active'
+                WHERE status IS NULL
+                LIMIT :limit OFFSET :offset
+            """),
+            {"limit": batch_size, "offset": offset}
+        )
+        if result.rowcount < batch_size:
+            break
+        offset += batch_size
+```
+
+## Next Steps
+
+- Learn about [Database](/backend/database) configuration
+- Set up [Deployment](/backend/deployment)
+- Review [Data Models](/backend/models)

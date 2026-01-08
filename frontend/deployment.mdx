@@ -1,0 +1,415 @@
+---
+title: "Deployment"
+description: "Deploy the Gistly frontend to production"
+icon: "rocket"
+---
+
+# Frontend Deployment
+
+## Deployment Architecture
+
+```
+┌─────────────────┐
+│   GitHub        │
+│   Repository    │
+└────────┬────────┘
+         │ Push
+         ▼
+┌─────────────────┐
+│   GitHub        │
+│   Actions       │
+│   (CI/CD)       │
+└────────┬────────┘
+         │ Build & Deploy
+         ▼
+┌─────────────────┐
+│   AWS EC2       │
+│   (Production)  │
+└─────────────────┘
+```
+
+## Prerequisites
+
+Before deploying, ensure you have:
+
+- [ ] Environment variables configured
+- [ ] Backend API is deployed and accessible
+- [ ] Domain name configured (optional)
+- [ ] SSL certificate (optional but recommended)
+
+## GitHub Actions CI/CD
+
+### Workflow Configuration
+
+Create `.github/workflows/deploy-frontend.yml`:
+
+```yaml
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'meeting-notes-dashboard/**'
+      - '.github/workflows/deploy-frontend.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: meeting-notes-dashboard/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./meeting-notes-dashboard
+        run: npm ci
+
+      - name: Run tests
+        working-directory: ./meeting-notes-dashboard
+        run: npm test
+
+      - name: Build
+        working-directory: ./meeting-notes-dashboard
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.API_URL }}
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /var/www/gistly-frontend
+            git pull origin main
+            cd meeting-notes-dashboard
+            npm ci --production
+            npm run build
+            pm2 restart gistly-frontend
+```
+
+### Required Secrets
+
+Set these in GitHub repository settings:
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `HOST` | Server IP address | `ec2-xxx.compute.amazonaws.com` |
+| `USERNAME` | SSH username | `ubuntu` |
+| `SSH_KEY` | Private SSH key | `-----BEGIN RSA PRIVATE KEY-----...` |
+| `API_URL` | Backend API URL | `https://api.gistly.ai/api/v1` |
+
+## AWS EC2 Deployment
+
+### Server Setup
+
+#### 1. Launch EC2 Instance
+
+```bash
+# Ubuntu 22.04 LTS
+# t3.medium (2 vCPU, 4 GB RAM)
+# Security group: HTTP (80), HTTPS (443), SSH (22)
+```
+
+#### 2. Connect to Server
+
+```bash
+ssh -i your-key.pem ubuntu@your-server-ip
+```
+
+#### 3. Install Node.js
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+```
+
+#### 4. Install PM2
+
+```bash
+sudo npm install -g pm2
+```
+
+#### 5. Clone Repository
+
+```bash
+cd /var/www
+sudo git clone https://github.com/meetai015/gistly-call-analytics.git
+cd gistly-call-analytics/meeting-notes-dashboard
+```
+
+### Application Setup
+
+#### 1. Environment Variables
+
+```bash
+# Create .env.production
+NEXT_PUBLIC_API_URL=https://api.gistly.ai/api/v1
+NEXT_PUBLIC_APP_URL=https://app.gistly.ai
+NEXT_PUBLIC_SENTRY_DSN=your-sentry-dsn
+```
+
+#### 2. Build Application
+
+```bash
+npm install
+npm run build
+```
+
+#### 3. Start with PM2
+
+```bash
+# Create ecosystem.config.js
+cat > ecosystem.config.js << 'EOF'
+module.exports = {
+  apps: [{
+    name: 'gistly-frontend',
+    script: 'node_modules/next/dist/bin/next',
+    args: 'start -p 3000',
+    instances: 1,
+    exec_mode: 'fork',
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3000
+    },
+    error_file: './logs/err.log',
+    out_file: './logs/out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+  }]
+};
+EOF
+
+# Start app
+pm2 start ecosystem.config.js
+
+# Save PM2 config
+pm2 save
+
+# Setup PM2 to start on boot
+pm2 startup
+```
+
+### Nginx Configuration
+
+#### Install Nginx
+
+```bash
+sudo apt update
+sudo apt install nginx
+```
+
+#### Configure Nginx
+
+Create `/etc/nginx/sites-available/gistly-frontend`:
+
+```nginx
+upstream nextjs {
+    server localhost:3000;
+}
+
+server {
+    listen 80;
+    server_name app.gistly.ai;
+
+    # Redirect HTTP to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name app.gistly.ai;
+
+    # SSL certificate
+    ssl_certificate /etc/ssl/certs/gistly.crt;
+    ssl_certificate_key /etc/ssl/private/gistly.key;
+
+    # Next.js static files
+    location /_next/static {
+        alias /var/www/gistly-call-analytics/meeting-notes-dashboard/.next/static;
+        expires 365d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Next.js images
+    location /_next/image {
+        proxy_pass http://nextjs;
+        proxy_cache_valid 200 60m;
+        proxy_cache_bypass $http_pragma $http_authorization;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # All other requests
+    location / {
+        proxy_pass http://nextjs;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+#### Enable Site
+
+```bash
+sudo ln -s /etc/nginx/sites-available/gistly-frontend /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### SSL Certificate
+
+#### Using Let's Encrypt
+
+```bash
+# Install Certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Get certificate
+sudo certbot --nginx -d app.gistly.ai
+
+# Auto-renewal (already configured)
+sudo certbot renew --dry-run
+```
+
+## Deployment Process
+
+### Manual Deploy
+
+```bash
+# SSH into server
+ssh ubuntu@your-server
+
+# Navigate to project
+cd /var/www/gistly-call-analytics
+
+# Pull latest changes
+git pull origin main
+
+# Update frontend
+cd meeting-notes-dashboard
+npm ci
+npm run build
+
+# Restart PM2
+pm2 restart gistly-frontend
+```
+
+### CI/CD Deploy
+
+Push to `main` branch triggers automatic deployment:
+
+```bash
+git add .
+git commit -m "Release v1.0.0"
+git push origin main
+```
+
+## Monitoring
+
+### PM2 Monitoring
+
+```bash
+# View status
+pm2 status
+
+# View logs
+pm2 logs gistly-frontend
+
+# Monitor in real-time
+pm2 monit
+```
+
+### Application Logs
+
+```bash
+# PM2 logs
+tail -f logs/out.log
+tail -f logs/err.log
+
+# Nginx logs
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+```
+
+### Health Check
+
+Create `/var/www/gistly-call-analytics/healthcheck.js`:
+
+```javascript
+const http = require('http');
+
+const options = {
+  host: 'localhost',
+  port: 3000,
+  path: '/api/health',
+  timeout: 2000,
+};
+
+const request = http.request(options, (res) => {
+  if (res.statusCode === 200) {
+    console.log('Health check passed');
+    process.exit(0);
+  } else {
+    console.log('Health check failed');
+    process.exit(1);
+  }
+});
+
+request.on('error', () => {
+  console.log('Health check failed');
+  process.exit(1);
+});
+
+request.end();
+```
+
+## Troubleshooting
+
+### Build Fails
+
+```bash
+# Clear cache
+rm -rf .next
+rm -rf node_modules
+npm install
+npm run build
+```
+
+### Port Already in Use
+
+```bash
+# Find process using port 3000
+sudo lsof -i :3000
+
+# Kill process
+sudo kill -9 <PID>
+```
+
+### PM2 Won't Start
+
+```bash
+# Flush PM2 logs
+pm2 flush
+
+# Reset PM2
+pm2 delete all
+pm2 start ecosystem.config.js
+```
+
+## Next Steps
+
+- Set up [Monitoring](/backend/monitoring)
+- Configure [Backend Deployment](/backend/deployment)

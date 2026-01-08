@@ -1,0 +1,366 @@
+---
+title: "Documentation"
+description: "Learn how to write and maintain Gistly documentation"
+icon: "book"
+---
+
+## Overview
+
+Gistly documentation is built with [Mintlify](https://mintlify.com), a powerful documentation platform that uses MDX (Markdown + JSX) for creating rich, interactive documentation pages.
+
+## How to Edit Documentation
+
+### Local Development Setup
+
+1. **Install the Mintlify CLI**
+   ```bash
+   npm install -g mint
+   ```
+
+2. **Start the local preview server**
+   ```bash
+   cd /Users/shishirmehto/git/gistly-call-analytics/docs
+   mint dev
+   ```
+
+3. **Open your browser**
+   Navigate to `http://localhost:3000` to see your documentation live!
+
+<Tip>
+The preview server automatically updates as you edit files. You don't need to refresh the page manually.
+</Tip>
+
+### File Structure
+
+Documentation files are organized in the `/docs` directory:
+
+```
+docs/
+├── index.mdx              # Homepage
+├── quickstart.mdx         # Quick start guide
+├── development/           # Development guides
+│   ├── documentation.mdx  # This file
+│   ├── ai-tools.mdx       # AI tools guide
+│   ├── code-style.mdx     # Code style guidelines
+│   ├── contributing.mdx   # Contribution guide
+│   └── testing.mdx        # Testing documentation
+├── essentials/            # Essential guides
+└── api-reference/         # API documentation
+```
+
+### Editing Files
+
+1. **Create or edit an `.mdx` file**
+   - Use the Mintlify MDX format
+   - Include proper frontmatter with title, description, and icon
+   - Follow the existing file structure
+
+2. **Preview changes locally**
+   - Changes appear instantly at `http://localhost:3000`
+   - Use the Mintlify CLI to validate your changes
+
+3. **Commit and push**
+   - The Mintlify GitHub app automatically deploys changes
+   - Your documentation updates in moments
+
+## Mintlify CLI Usage
+
+### Common Commands
+
+```bash
+# Start development server
+mint dev
+
+# Validate documentation structure
+mint validate
+
+# Build documentation for production
+mint build
+
+# Get help
+mint --help
+```
+
+### Configuration
+
+The Mintlify configuration is in `mint.json` at the root of the docs directory:
+
+```json
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Gistly",
+  "logo": {
+    "dark": "/logo/dark.png",
+    "light": "/logo/light.png"
+  },
+  "favicon": "/favicon.png",
+  "colors": {
+    "primary": "#0D9488",
+    "light": "#0D9488",
+    "dark": "#0D9488",
+    "anchors": {
+      "from": "#0D9488",
+      "to": "#14B8A6"
+    }
+  }
+}
+```
+
+## MDX Syntax Reference
+
+### Frontmatter
+
+Every MDX file must start with frontmatter:
+
+```yaml
+---
+title: "Page Title"
+description: "A brief description of the page content"
+icon: "book"  # Optional: icon name from Mintlify icon set
+---
+```
+
+### Common Components
+
+#### Cards
+
+Create navigation cards with the `Card` component:
+
+```mdx
+<Card
+  title="Getting Started"
+  icon="rocket"
+  href="/quickstart"
+  horizontal
+>
+  Start your journey with Gistly in minutes.
+</Card>
+```
+
+#### Accordions
+
+Create collapsible content sections:
+
+```mdx
+<AccordionGroup>
+  <Accordion icon="code" title="Code Example">
+    Your code or content here
+  </Accordion>
+  <Accordion icon="terminal" title="Terminal Example">
+    Terminal commands or output
+  </Accordion>
+</AccordionGroup>
+```
+
+#### Tips and Notes
+
+Add highlighted information:
+
+```mdx
+<Tip>
+This is a helpful tip for users.
+</Tip>
+
+<Note>
+This is important information users should know.
+</Note>
+
+<Warning>
+This is a warning about potential issues.
+</Warning>
+```
+
+#### Code Blocks
+
+Add syntax-highlighted code:
+
+```mdx
+```python
+def greet(name):
+    return f"Hello, {name}!"
+```
+```
+
+#### Callouts
+
+Create alert boxes:
+
+```mdx
+<Callout type="info">
+  Informational callout
+</Callout>
+
+<Callout type="warning">
+  Warning callout
+</Callout>
+
+<Callout type="error">
+  Error callout
+</Callout>
+```
+
+#### Tabs
+
+Create tabbed content:
+
+```mdx
+<Tabs>
+  <Tab title="Python">
+    Python code here
+  </Tab>
+  <Tab title="JavaScript">
+    JavaScript code here
+  </Tab>
+</Tabs>
+```
+
+#### Steps
+
+Create step-by-step guides:
+
+```mdx
+<Steps>
+  <Step>
+    ### First step
+
+    Description of the first step.
+  </Step>
+  <Step>
+    ### Second step
+
+    Description of the second step.
+  </Step>
+</Steps>
+```
+
+### Markdown Features
+
+All standard Markdown features are supported:
+
+- **Headings**: `# H1`, `## H2`, `### H3`, etc.
+- **Bold**: `**bold text**`
+- **Italic**: `*italic text*`
+- **Links**: `[link text](/url)`
+- **Lists**: Ordered and unordered
+- **Tables**: Standard Markdown tables
+- **Images**: `![alt text](/path/to/image.png)`
+
+### Standard Markdown Example
+
+```mdx
+## Getting Started
+
+This is a **paragraph** with *italic* text and a [link](/quickstart).
+
+### Features
+
+- Feature 1
+- Feature 2
+- Feature 3
+
+| Column 1 | Column 2 |
+|----------|----------|
+| Data 1   | Data 2   |
+```
+
+## Navigation Structure
+
+Update navigation in `mint.json`:
+
+```json
+{
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "index",
+        "quickstart"
+      ]
+    },
+    {
+      "group": "Development",
+      "pages": [
+        "development/documentation",
+        "development/ai-tools",
+        "development/code-style",
+        "development/contributing",
+        "development/testing"
+      ]
+    }
+  ]
+}
+```
+
+## Best Practices
+
+### Writing Documentation
+
+1. **Be clear and concise**
+   - Use simple language
+   - Avoid jargon when possible
+   - Explain technical terms when used
+
+2. **Structure content logically**
+   - Start with overview
+   - Follow with details
+   - End with examples
+
+3. **Use examples generously**
+   - Show, don't just tell
+   - Provide real-world use cases
+   - Include code samples
+
+4. **Keep it current**
+   - Update docs with code changes
+   - Remove outdated information
+   - Review documentation regularly
+
+### File Organization
+
+1. **Use descriptive filenames**
+   - `user-guide.mdx` instead of `guide.mdx`
+   - `api-authentication.mdx` instead of `auth.mdx`
+
+2. **Group related content**
+   - Use directories for related pages
+   - Create logical sections
+   - Maintain consistent structure
+
+3. **Follow naming conventions**
+   - Use lowercase with hyphens
+   - Match navigation structure
+   - Keep names meaningful
+
+## Troubleshooting
+
+### Common Issues
+
+**Preview not updating**
+```bash
+# Restart the development server
+mint dev
+```
+
+**Build errors**
+```bash
+# Validate your documentation
+mint validate
+```
+
+**Missing components**
+- Check component spelling
+- Verify component exists in Mintlify
+- Check for proper JSX syntax
+
+### Getting Help
+
+- Check [Mintlify documentation](https://mintlify.com/docs)
+- Join the [Mintlify community](https://mintlify.com/community)
+- Review existing documentation files for examples
+
+## Additional Resources
+
+- [Mintlify Documentation](https://mintlify.com/docs)
+- [MDX Specification](https://mdxjs.com/)
+- [Mintlify Component Reference](https://mintlify.com/docs/components)
+- [Gistly Repository](https://github.com/your-org/gistly-call-analytics)

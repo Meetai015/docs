@@ -1,0 +1,434 @@
+---
+title: "API Integration"
+description: "Integrating the frontend with the Gistly backend API"
+icon: "link"
+---
+
+# API Integration
+
+## Overview
+
+The frontend communicates with the backend through a RESTful API. All API calls go through a centralized fetch wrapper that handles authentication, errors, and response formatting.
+
+## Base Configuration
+
+### Environment Variables
+
+Set the backend API URL in `.env.local`:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+```
+
+### API Client Setup
+
+The main API client is in `src/lib/api/fetch.ts`:
+
+```typescript
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+
+export async function fetchAPI<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+
+  const config: RequestInit = {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  };
+
+  // Add auth token
+  const token = getAuthToken();
+  if (token) {
+    config.headers = {
+      ...config.headers,
+      Authorization: `Bearer ${token}`,
+    };
+  }
+
+  const response = await fetch(url, config);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new APIError(error.message, response.status);
+  }
+
+  return response.json();
+}
+
+class APIError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+    this.name = 'APIError';
+  }
+}
+```
+
+## Authentication
+
+### Token Management
+
+```typescript
+// src/lib/auth.ts
+const TOKEN_KEY = 'auth_token';
+
+export function setAuthToken(token: string) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(TOKEN_KEY, token);
+  }
+}
+
+export function getAuthToken(): string | null {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem(TOKEN_KEY);
+  }
+  return null;
+}
+
+export function clearAuthToken() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+}
+```
+
+### Login Flow
+
+```typescript
+// src/lib/api/auth.ts
+export async function login(email: string, password: string) {
+  const response = await fetchAPI<{ token: string; user: User }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+
+  setAuthToken(response.token);
+  return response.user;
+}
+
+export async function logout() {
+  await fetchAPI('/auth/logout', { method: 'POST' });
+  clearAuthToken();
+  window.location.href = '/login';
+}
+```
+
+## API Endpoints
+
+### Meetings API
+
+```typescript
+// src/lib/api/meetings.ts
+export interface Meeting {
+  id: string;
+  title: string;
+  date: string;
+  duration: number;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  attendees: Attendee[];
+}
+
+export interface MeetingFilters {
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+}
+
+export async function fetchMeetings(filters?: MeetingFilters): Promise<Meeting[]> {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.startDate) params.set('start_date', filters.startDate);
+  if (filters?.endDate) params.set('end_date', filters.endDate);
+  if (filters?.search) params.set('search', filters.search);
+
+  const query = params.toString() ? `?${params}` : '';
+  return fetchAPI<Meeting[]>(`/meetings${query}`);
+}
+
+export async function fetchMeeting(id: string): Promise<Meeting> {
+  return fetchAPI<Meeting>(`/meetings/${id}`);
+}
+
+export async function createMeeting(data: Partial<Meeting>): Promise<Meeting> {
+  return fetchAPI<Meeting>('/meetings', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateMeeting(id: string, data: Partial<Meeting>): Promise<Meeting> {
+  return fetchAPI<Meeting>(`/meetings/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteMeeting(id: string): Promise<void> {
+  return fetchAPI(`/meetings/${id}`, { method: 'DELETE' });
+}
+```
+
+### Reports API
+
+```typescript
+// src/lib/api/reports.ts
+export interface Report {
+  id: string;
+  type: 'red_flag' | 'trend' | 'meeting_summary';
+  created_at: string;
+  filters: Record<string, any>;
+  results: any;
+}
+
+export async function generateReport(type: string, filters: Record<string, any>): Promise<Report> {
+  return fetchAPI<Report>('/reports', {
+    method: 'POST',
+    body: JSON.stringify({ type, filters }),
+  });
+}
+
+export async function fetchReports(): Promise<Report[]> {
+  return fetchAPI<Report[]>('/reports');
+}
+
+export async function downloadReport(id: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/reports/${id}/download`, {
+    headers: {
+      Authorization: `Bearer ${getAuthToken()}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to download report');
+  }
+
+  return response.blob();
+}
+```
+
+### Red Flags API
+
+```typescript
+// src/lib/api/red-flags.ts
+export interface RedFlag {
+  id: string;
+  meeting_id: string;
+  severity: 'low' | 'medium' | 'high';
+  category: string;
+  description: string;
+  timestamp: string;
+}
+
+export async function fetchRedFlags(filters?: {
+  meeting_id?: string;
+  severity?: string;
+}): Promise<RedFlag[]> {
+  const params = new URLSearchParams();
+  if (filters?.meeting_id) params.set('meeting_id', filters.meeting_id);
+  if (filters?.severity) params.set('severity', filters.severity);
+
+  const query = params.toString() ? `?${params}` : '';
+  return fetchAPI<RedFlag[]>(`/red-flags${query}`);
+}
+```
+
+## React Hooks for API Calls
+
+### useMeetings Hook
+
+```typescript
+// src/hooks/use-meetings.ts
+import { useState, useEffect } from 'react';
+import { fetchMeetings, type MeetingFilters } from '@/lib/api/meetings';
+
+export function useMeetings(filters?: MeetingFilters) {
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    async function loadMeetings() {
+      try {
+        setIsLoading(true);
+        const data = await fetchMeetings(filters);
+        setMeetings(data);
+      } catch (err) {
+        setError(err as Error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadMeetings();
+  }, [filters]);
+
+  return { meetings, isLoading, error };
+}
+```
+
+### SWR Integration
+
+```typescript
+// src/hooks/use-meetings-swr.ts
+import useSWR from 'swr';
+import { fetchAPI } from '@/lib/api/fetch';
+
+export function useMeetings(filters?: MeetingFilters) {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set('status', filters.status);
+
+  const { data, error, isLoading, mutate } = useSWR(
+    `/meetings?${params.toString()}`,
+    () => fetchAPI<Meeting[]>(`/meetings?${params.toString()}`)
+  );
+
+  return {
+    meetings: data ?? [],
+    error,
+    isLoading,
+    mutate,
+  };
+}
+```
+
+## Error Handling
+
+### Global Error Handler
+
+```typescript
+// src/lib/api/fetch.ts
+export async function fetchAPI<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      handleAPIError(response.status, error);
+      throw new APIError(error.message || 'Request failed', response.status);
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof APIError) throw error;
+    throw new APIError('Network error', 0);
+  }
+}
+
+function handleAPIError(status: number, error: any) {
+  switch (status) {
+    case 401:
+      // Unauthorized - redirect to login
+      clearAuthToken();
+      window.location.href = '/login';
+      break;
+    case 403:
+      // Forbidden - show permission error
+      toast.error('You do not have permission to perform this action');
+      break;
+    case 404:
+      // Not found
+      toast.error('Resource not found');
+      break;
+    case 500:
+      // Server error
+      toast.error('Server error. Please try again later');
+      break;
+    default:
+      toast.error(error.message || 'An error occurred');
+  }
+}
+```
+
+### Error Boundary
+
+```typescript
+// src/components/error-boundary.tsx
+'use client';
+
+export function APIErrorBoundary({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[400px]">
+      <h2 className="text-2xl font-bold mb-4">Something went wrong</h2>
+      <p className="text-muted-foreground mb-4">{error.message}</p>
+      <button onClick={reset} className="btn-primary">
+        Try again
+      </button>
+    </div>
+  );
+}
+```
+
+## Pagination
+
+### Paginated Fetch
+
+```typescript
+// src/lib/api/pagination.ts
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+export async function fetchPaginated<T>(
+  endpoint: string,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<PaginatedResponse<T>> {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    page_size: pageSize.toString(),
+  });
+
+  return fetchAPI<PaginatedResponse<T>>(`${endpoint}?${params}`);
+}
+```
+
+### usePaginated Hook
+
+```typescript
+// src/hooks/use-paginated.ts
+export function usePaginatedMeetings(pageSize: number = 20) {
+  const [page, setPage] = useState(1);
+
+  const { data, error, isLoading } = useSWR(
+    `/meetings?page=${page}&page_size=${pageSize}`,
+    () => fetchPaginated<Meeting>('/meetings', page, pageSize)
+  );
+
+  return {
+    meetings: data?.results ?? [],
+    pageCount: data ? Math.ceil(data.count / pageSize) : 0,
+    isLoading,
+    error,
+    page,
+    setPage,
+  };
+}
+```
+
+## Next Steps
+
+- Configure [Deployment](/frontend/deployment)
+- Learn about [Backend API](/backend/api-overview)

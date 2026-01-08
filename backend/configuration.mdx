@@ -1,0 +1,352 @@
+---
+title: "Configuration"
+description: "Backend configuration management, environment variables, and Flask extensions setup"
+icon: "settings"
+---
+
+# Configuration
+
+The Gistly Call Analytics backend uses a robust configuration system that supports multiple environments (Development, Production, Staging, Testing) with environment-specific settings.
+
+## Configuration Classes
+
+The backend defines multiple configuration classes in `/backend-meeting-notes/app/config.py`:
+
+### Base Config Class
+
+The `Config` class serves as the base configuration with default settings:
+
+```python
+class Config:
+    SECRET_KEY = os.environ.get("SECRET_KEY") or "meeting_notes_backend_secret_key"
+    SQLALCHEMY_TRACK_MODIFICATIONS = True
+    FRONTEND_URL = os.environ.get("FRONTEND_URL") or "https://console.gistly.ai"
+```
+
+### Development Config
+
+```python
+class DevelopmentConfig(Config):
+    DEBUG = True
+    SQLALCHEMY_DATABASE_URI = 'postgresql://username:password@localhost:5432/dev_backend_database'
+    SQLALCHEMY_TRACK_MODIFICATIONS = True
+    CACHE_ENABLED = False  # Disabled for development
+```
+
+**Key Features:**
+- Debug mode enabled for detailed error messages
+- Local PostgreSQL database
+- SSL disabled for local development
+- No query timeout for easier debugging
+
+### Production Config
+
+```python
+class ProductionConfig(Config):
+    DEBUG = False
+    SQLALCHEMY_DATABASE_URI = 'postgresql://user:pass@host:5432/backend_database'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+```
+
+**Key Features:**
+- Debug mode disabled
+- AWS RDS PostgreSQL database
+- SSL enforced for database connections
+- Connection pooling enabled
+- Query timeout configured (3 minutes)
+
+### Staging Config
+
+```python
+class StagingConfig(Config):
+    DEBUG = True
+    SQLALCHEMY_DATABASE_URI = 'postgresql://user:pass@host:5432/staging_backend_database'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+```
+
+**Key Features:**
+- Debug mode enabled for testing
+- Separate staging database
+- Production-like configuration
+
+### Testing Config
+
+```python
+class TestingConfig(Config):
+    DEBUG = True
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'postgresql://username:password@localhost:5432/test_backend_database'
+```
+
+**Key Features:**
+- Testing mode enabled
+- Isolated test database
+- Reduced connection pool (pool_size: 5)
+- Shorter timeouts for faster tests
+
+## Environment Variables
+
+### Database Configuration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `DATABASE_URL` | PostgreSQL connection URI | - | Yes |
+| `SQLALCHEMY_POOL_SIZE` | Database connection pool size | 50 | No |
+| `SQLALCHEMY_MAX_OVERFLOW` | Maximum overflow connections | 20 | No |
+| `SQLALCHEMY_POOL_TIMEOUT` | Connection timeout (seconds) | 30 | No |
+
+### Redis Configuration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` | Yes |
+| `CACHE_ENABLED` | Enable Redis caching | `true` | No |
+| `CACHE_DEFAULT_TTL` | Default cache TTL (seconds) | `900` (15 min) | No |
+
+### AWS Configuration
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `AWS_ACCESS_KEY_ID` | AWS access key | Yes |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key | Yes |
+| `AWS_REGION` | AWS region | Yes |
+| `S3_BUCKET_NAME` | S3 bucket for audio storage | Yes |
+| `SQS_QUEUE_URL` | SQS queue for processing | Yes |
+
+### OpenAI Configuration
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `OPENAI_API_KEY` | OpenAI API key | Yes |
+| `OPENAI_MODEL` | Model to use for AI features | Yes |
+
+### Application Configuration
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `SECRET_KEY` | Flask secret key | - | Yes |
+| `FLASK_ENV` | Environment (development/production/staging) | `development` | No |
+| `FRONTEND_URL` | Frontend application URL | `https://console.gistly.ai` | No |
+| `JWT_SECRET_KEY` | JWT signing secret | - | Yes |
+| `JWT_ACCESS_TOKEN_EXPIRES` | Token expiration time | 7 days | No |
+
+## Flask Extensions Setup
+
+### SQLAlchemy
+
+The backend uses SQLAlchemy with custom retry logic for database connections:
+
+```python
+class RetryingDatabase(SQLAlchemy):
+    def get_engine(self, app=None, bind=None):
+        """Get database engine with retry logic for initial connection."""
+        max_retries = 3
+        retry_delay = 1  # seconds
+
+        for attempt in range(max_retries):
+            try:
+                engine = super().get_engine(app, bind)
+                # Test the connection
+                with engine.connect() as conn:
+                    conn.execute("SELECT 1")
+                return engine
+            except OperationalError as e:
+                if "SSL" in str(e) and attempt < max_retries - 1:
+                    sleep(retry_delay)
+                    continue
+                raise
+
+db = RetryingDatabase(session_options={"expire_on_commit": False})
+```
+
+**Session Options:**
+- `expire_on_commit=False`: Prevents attributes from expiring after commit, allowing access to data outside transactions
+
+### Flask-Migrate
+
+Database migrations are handled by Flask-Migrate:
+
+```python
+migrate = Migrate()
+```
+
+Initialization in app factory:
+
+```python
+def create_app(config_class=Config):
+    app = Flask(__name__)
+    db.init_app(app)
+    migrate.init_app(app, db)
+    return app
+```
+
+### Flask-JWT-Extended
+
+JWT authentication is configured with:
+
+```python
+app.config["JWT_SECRET_KEY"] = "meeting_notes_backend_secret_key"
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(days=7)
+```
+
+### Flask-CORS
+
+CORS is configured for specific origins:
+
+```python
+allowed_origins = [
+    "http://localhost:3000",
+    "https://console.gistly.ai",
+    "https://console-staging.gistly.ai",
+]
+
+CORS(app, resources={r"/*": {"origins": allowed_origins}}, supports_credentials=True)
+```
+
+## Database Connection Pooling
+
+The backend uses SQLAlchemy's connection pooling to manage database connections efficiently:
+
+### Pool Configuration
+
+```python
+SQLALCHEMY_ENGINE_OPTIONS = {
+    "pool_size": 50,          # Base connection pool size
+    "max_overflow": 20,       # Additional connections under load
+    "pool_timeout": 30,       # Wait time for connection (seconds)
+    "pool_recycle": 1800,     # Recycle connections after 30 minutes
+    "pool_pre_ping": True,    # Enable connection health checks
+}
+```
+
+### Connection Arguments
+
+```python
+"connect_args": {
+    "connect_timeout": 10,
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 5,
+    "sslmode": "require",              # Enforce SSL in production
+    "options": "-c statement_timeout=180000",  # 3 minute query timeout
+}
+```
+
+### Connection Pool Strategy
+
+The pooling strategy is designed for high-concurrency scenarios:
+
+- **Base Pool (50 connections)**: Handles normal concurrent request load
+- **Overflow Pool (20 connections)**: Additional connections during traffic spikes
+- **Total Capacity**: 70 concurrent database connections
+- **Recycling**: Connections are recycled every 30 minutes to prevent stale connections
+- **Pre-ping**: Each connection is tested before use to ensure validity
+
+### Environment-Specific Pooling
+
+| Environment | Pool Size | Max Overflow | Timeout |
+|-------------|-----------|--------------|----------|
+| Production | 50 | 20 | 30s |
+| Staging | 50 | 20 | 30s |
+| Development | 50 | 20 | 30s |
+| Testing | 5 | 2 | 10s |
+
+## Configuration Loading
+
+The application loads configuration based on the `FLASK_ENV` environment variable:
+
+```python
+env = os.getenv("FLASK_ENV", "development")
+if env == "development":
+    app.config.from_object(DevelopmentConfig)
+elif env == "production":
+    app.config.from_object(ProductionConfig)
+elif env == "staging":
+    app.config.from_object(StagingConfig)
+```
+
+## Best Practices
+
+### 1. Environment Variables
+
+- **Never commit** sensitive credentials to version control
+- Use `.env` files for local development (add to `.gitignore`)
+- Use environment variable management in production (AWS Secrets Manager, etc.)
+
+### 2. Secret Keys
+
+Generate secure secret keys:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### 3. Database URLs
+
+Use environment-specific database URLs:
+
+```bash
+# Development
+export DATABASE_URL="postgresql://user:pass@localhost:5432/dev_db"
+
+# Production
+export DATABASE_URL="postgresql://user:pass@production-db.example.com:5432/prod_db"
+```
+
+### 4. Frontend URLs
+
+Configure the correct frontend URL for CORS:
+
+```bash
+# Development
+export FRONTEND_URL="http://localhost:3000"
+
+# Production
+export FRONTEND_URL="https://console.gistly.ai"
+
+# Staging
+export FRONTEND_URL="https://console-staging.gistly.ai"
+```
+
+## Troubleshooting
+
+### Connection Pool Exhausted
+
+**Error**: `TimeoutError: QueuePool limit exceeded`
+
+**Solution**:
+1. Increase `pool_size` and `max_overflow`
+2. Check for connection leaks (unclosed sessions)
+3. Reduce request concurrency
+4. Optimize long-running queries
+
+### SSL Connection Errors
+
+**Error**: `OperationalError: (ssl error)`
+
+**Solution**:
+1. Verify SSL certificate is valid
+2. Check `sslmode` setting in connection args
+3. Ensure database server supports SSL
+4. For development, set `sslmode: "disable"`
+
+### Redis Connection Failures
+
+**Error**: `Error connecting to Redis`
+
+**Solution**:
+1. Verify Redis is running: `redis-cli ping`
+2. Check `REDIS_URL` is correct
+3. Ensure Redis port (6379) is accessible
+4. If caching is not critical, set `CACHE_ENABLED=false`
+
+### Environment Variable Not Loading
+
+**Error**: Configuration values are defaults
+
+**Solution**:
+1. Ensure `.env` file exists in project root
+2. Verify `load_dotenv()` is called in app initialization
+3. Check variable names match exactly (case-sensitive)
+4. Restart the application after changing `.env`

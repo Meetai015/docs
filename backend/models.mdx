@@ -1,0 +1,702 @@
+---
+title: Data Models
+description: Database models and relationships for the Gistly Call Analytics backend
+icon: database
+---
+
+import { Callout } from '@components'
+
+## Overview
+
+The backend uses SQLAlchemy ORM with PostgreSQL as the database. Models are organized into logical groups covering users, organizations, meetings, leads, analysis results, object system, and reporting.
+
+<Callout type="info">
+All primary keys use UUID (PostgreSQL UUID type) with automatic generation via `uuid_generate_v4()`.
+</Callout>
+
+## Core Models
+
+### User
+
+Represents application users with authentication and preferences.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `u_id` | UUID | Primary key |
+| `u_first_name` | String | First name |
+| `u_last_name` | String | Last name |
+| `u_email` | String | Email address (unique) |
+| `u_password` | String | Hashed password |
+| `u_password_last_modified` | DateTime | Last password update |
+| `u_verification_method` | Enum | Verification method: "GOOGLE" or "OTP" |
+| `u_theme` | Enum | UI theme: "LIGHT", "DARK", "SYSTEM" |
+| `u_voice_sample_s3_key` | String | S3 key for voice sample |
+| `u_timezone` | String(50) | User timezone (default: "UTC") |
+| `u_created_at` | DateTime | Account creation timestamp |
+| `u_modified_at` | DateTime | Last update timestamp |
+
+**Relationships:**
+- `templates` - Has many Templates
+- `roles` - Many-to-many with Role via user_roles
+- `organisations` - Many-to-many with Organisation via user_organisations
+- `teams` - Many-to-many with Team via user_teams
+
+### Organisation
+
+Represents organizations/companies using the platform.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `org_id` | UUID | Primary key |
+| `org_name` | String(100) | Organization name |
+| `org_domain` | String(100) | Organization domain |
+| `org_slug` | String(150) | URL-friendly slug (unique) |
+| `org_industry` | String(100) | Industry type |
+| `logo` | String(250) | S3 key for logo image |
+
+**Constraints:**
+- Unique constraint on (`org_name`, `org_domain`)
+
+**Relationships:**
+- `org_teams` - Has many Team
+- `org_users` - Many-to-many with User via user_organisations
+
+### Team
+
+Represents teams within organizations for grouping users.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tm_id` | UUID | Primary key |
+| `tm_name` | String(100) | Team name |
+| `tm_org_id` | UUID | Foreign key to Organisation |
+| `created_at` | DateTime | Creation timestamp |
+
+**Constraints:**
+- Unique constraint on (`tm_name`, `tm_org_id`)
+
+**Relationships:**
+- `organisation` - Belongs to Organisation
+- `users` - Many-to-many with User via user_teams
+
+### Role
+
+Defines user roles with organization-specific permissions.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `r_id` | UUID | Primary key |
+| `r_name` | String(20) | Role name |
+| `r_org_id` | UUID | Foreign key to Organisation |
+| `r_permissions` | JSON | Permission object |
+
+**Constraints:**
+- Unique constraint on (`r_org_id`, `r_name`)
+
+**Relationships:**
+- `r_users` - Many-to-many with User via user_roles
+
+## Meeting Models
+
+### Meeting
+
+Stores meeting/call information and metadata.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `m_id` | UUID | Primary key |
+| `m_name` | String(255) | Meeting title |
+| `m_start_time` | Timestamp | Meeting start time |
+| `m_end_time` | Timestamp | Meeting end time |
+| `m_participants` | String[] | Array of participant emails |
+| `m_description` | Text | Meeting description |
+| `m_user_id` | UUID | Foreign key to User (owner) |
+| `org_id` | UUID | Foreign key to Organisation |
+| `m_status` | String(50) | Meeting status |
+| `m_url` | String(500) | Meeting/recording URL |
+| `m_tp_id` | UUID | Foreign key to Templates (summary) |
+| `m_is_summary` | Boolean | Summary generated flag |
+| `m_atp_id` | UUID | Foreign key to Templates (analysis) |
+| `m_uploaded_by` | UUID | Foreign key to User (uploader) |
+
+**Relationships:**
+- `owner` - Belongs to User (m_user_id)
+- `uploader` - Belongs to User (m_uploaded_by)
+- `leads` - Many-to-many with Leads via Meeting_leads
+- `dispositions` - Many-to-many with Disposition via Meeting_disposition
+- `shares` - Has many MeetingShare
+- `detected_red_flags` - Has many DetectedRedFlag
+
+### MeetingShare
+
+Handles meeting sharing via access tokens.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `share_id` | UUID | Primary key |
+| `meeting_id` | UUID | Foreign key to Meeting |
+| `shared_by_id` | UUID | Foreign key to User |
+| `access_token` | String(255) | Unique access token |
+| `created_at` | DateTime | Creation timestamp |
+| `expires_at` | DateTime | Expiration timestamp |
+| `is_active` | Boolean | Active status |
+
+**Relationships:**
+- `meeting` - Belongs to Meeting
+- `shared_by` - Belongs to User
+
+### Video
+
+Stores video recording metadata.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `v_id` | UUID | Primary key |
+| `v_storage` | String(255) | Storage location/path |
+| `v_description` | Text | Video description |
+| `v_duration` | Integer | Duration in seconds |
+| `v_resolution` | String(20) | Video resolution |
+| `v_size` | Integer | File size in bytes |
+| `v_m_id` | UUID[] | Array of meeting IDs |
+| `v_format` | String(255) | Video format |
+
+**Indexes:**
+- GIN index on `v_m_id` for efficient array queries
+
+## Lead Models
+
+### Leads
+
+Represents leads/contacts in the sales pipeline.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `l_id` | UUID | Primary key |
+| `l_name` | String(255) | Lead name |
+| `l_email` | String(255) | Email address |
+| `l_phone` | String(255) | Phone number |
+| `l_description` | Text | Lead description |
+| `l_created_at` | Timestamp | Creation timestamp |
+| `l_updated_at` | Timestamp | Last update timestamp |
+
+**Relationships:**
+- `meetings` - Many-to-many with Meeting via Meeting_leads
+- `dispositions` - Many-to-many with Disposition via Leads_disposition
+
+### LeadsProfile
+
+Stores profile information for leads.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `l_id` | UUID | Primary key |
+| `l_m_id` | UUID | Foreign key to Meeting |
+| `l_profile` | JSON | Profile data object |
+
+## Analysis Models
+
+### Scores
+
+Stores parameter scores for meetings.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `s_id` | UUID | Primary key |
+| `s_value` | UUID | Foreign key to ResponseConfiguration |
+| `s_reason` | Text | Reason for score |
+| `s_m_id` | UUID | Foreign key to Meeting |
+| `s_p_id` | UUID | Foreign key to Parameters |
+| `s_u_value` | UUID | Foreign key to ResponseConfiguration (user) |
+| `s_u_reason` | Text | User-provided reason |
+
+**Indexes:**
+- Composite index on (`s_m_id`, `s_p_id`)
+
+### Templates
+
+Defines templates for meeting analysis.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `tp_id` | UUID | Primary key |
+| `tp_name` | String(255) | Template name |
+| `tp_u_id` | UUID | Foreign key to User |
+| `tp_org_id` | UUID | Foreign key to Organisation |
+| `tp_version` | Integer | Template version |
+| `is_deleted` | Boolean | Soft delete flag |
+
+**Relationships:**
+- `user` - Belongs to User
+- `organisation` - Belongs to Organisation
+
+### Summary
+
+Stores meeting/ticket summaries.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `s_id` | UUID | Primary key |
+| `s_text` | Text | Summary text |
+| `s_agenda` | Text | Meeting agenda |
+| `s_topics` | Text | Topics discussed |
+| `s_action_items` | Text | Action items |
+| `s_m_id` | UUID | Foreign key to Meeting (nullable) |
+| `s_t_id` | UUID | Foreign key to Tickets (nullable) |
+| `s_entity_type` | String(20) | Entity type: "meeting" or "ticket" |
+| `created_at` | DateTime | Creation timestamp |
+| `updated_at` | DateTime | Last update timestamp |
+
+### Transcription
+
+Stores transcribed text from meetings.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `t_id` | UUID | Primary key |
+| `t_text` | Text | Transcribed text |
+| `t_m_id` | UUID | Foreign key to Meeting |
+
+### Sentiments
+
+Stores sentiment analysis results.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sn_id` | UUID | Primary key |
+| `sn_m_id` | UUID | Foreign key to Meeting |
+| `sn_data` | JSON | Sentiment data object |
+
+### RedFlag
+
+Configuration for red flag detection rules.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rf_id` | UUID | Primary key |
+| `org_id` | UUID | Foreign key to Organisation |
+| `rf_title` | String(255) | Red flag title |
+| `rf_detection_criteria` | Text | Detection criteria |
+| `rf_severity_level` | Enum | Severity: "Critical", "High", "Medium", "Low" |
+| `rf_notify_roles` | String[] | Roles to notify |
+| `rf_notification_channels` | String[] | Notification channels |
+| `rf_role_call_types` | JSONB | Role call type configuration |
+| `rf_enabled` | Boolean | Enabled status |
+| `rf_created_at` | DateTime | Creation timestamp |
+| `rf_updated_at` | DateTime | Last update timestamp |
+
+**Relationships:**
+- `detections` - Has many DetectedRedFlag
+
+### DetectedRedFlag
+
+Stores detected red flags in meetings.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `drf_id` | UUID | Primary key |
+| `drf_m_id` | UUID | Foreign key to Meeting |
+| `drf_rf_id` | UUID | Foreign key to RedFlag |
+| `drf_detected_at` | DateTime | Detection timestamp |
+| `drf_reason` | Text | Detection reason |
+| `drf_timestamps` | Text | Timestamp references |
+| `drf_severity_level` | String(20) | Severity level |
+| `drf_status` | String(20) | Status (default: "active") |
+| `drf_resolved_at` | DateTime | Resolution timestamp |
+| `drf_resolved_by` | UUID | Foreign key to User |
+| `drf_resolution_notes` | Text | Resolution notes |
+| `drf_created_at` | DateTime | Creation timestamp |
+| `drf_updated_at` | DateTime | Last update timestamp |
+| `is_deleted` | Boolean | Soft delete flag |
+
+**Relationships:**
+- `meeting` - Belongs to Meeting
+- `red_flag` - Belongs to RedFlag
+- `resolved_by_user` - Belongs to User
+
+## Object System
+
+The object system provides a flexible, dynamic schema for managing custom entities.
+
+### Object
+
+Defines custom object types (e.g., People, Companies, Deals).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `obj_id` | UUID | Primary key |
+| `organisation_id` | UUID | Foreign key to Organisation |
+| `obj_name` | String(50) | Stable object key |
+| `obj_display_name` | String(100) | Display name |
+| `obj_description` | Text | Description |
+| `obj_type` | Enum | Type: "standard", "custom", "system" |
+| `obj_settings` | JSONB | Settings object |
+| `obj_schema` | JSONB | Schema definition |
+| `obj_is_active` | Boolean | Active status |
+| `obj_is_archived` | Boolean | Archived status |
+| `obj_call_enabled` | Boolean | Call enabled |
+| `obj_created_at` | DateTime | Creation timestamp |
+| `obj_updated_at` | DateTime | Last update timestamp |
+| `obj_created_by` | UUID | Foreign key to User |
+| `obj_updated_by` | UUID | Foreign key to User |
+| `obj_version` | Integer | Version number |
+
+**Constraints:**
+- Unique constraint on (`organisation_id`, `obj_name`)
+
+**Relationships:**
+- `attributes` - Has many Attribute
+
+### Attribute
+
+Defines attributes for objects.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `attr_id` | UUID | Primary key |
+| `obj_id` | UUID | Foreign key to Object |
+| `organisation_id` | UUID | Foreign key to Organisation |
+| `attr_name` | String(100) | Attribute key |
+| `attr_display_name` | String(150) | Display name |
+| `attr_description` | Text | Description |
+| `attr_type` | Enum | Data type (text, number, boolean, date, etc.) |
+| `attr_config` | JSONB | Configuration object |
+| `attr_validation` | JSONB | Validation rules |
+| `attr_default_value` | JSONB | Default value |
+| `attr_is_ai_generated` | Boolean | AI-generated flag |
+| `attr_ai_model` | String(50) | AI model used |
+| `attr_ai_prompt` | Text | AI prompt |
+| `attr_is_required` | Boolean | Required flag |
+| `attr_is_unique` | Boolean | Unique flag |
+| `attr_is_indexed` | Boolean | Indexed flag |
+| `attr_is_searchable` | Boolean | Searchable flag |
+| `attr_is_visible` | Boolean | Visible flag |
+| `attr_is_editable` | Boolean | Editable flag |
+| `attr_is_system` | Boolean | System flag |
+| `attr_order` | Integer | Display order |
+| `attr_group` | String(50) | Group name |
+| `attr_is_active` | Boolean | Active status |
+| `attr_is_archived` | Boolean | Archived status |
+| `attr_created_at` | DateTime | Creation timestamp |
+| `attr_updated_at` | DateTime | Last update timestamp |
+| `attr_created_by` | UUID | Foreign key to User |
+| `attr_updated_by` | UUID | Foreign key to User |
+| `attr_version` | Integer | Version number |
+
+### Record
+
+Stores actual data records for objects.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rec_id` | UUID | Primary key |
+| `obj_id` | UUID | Foreign key to Object |
+| `organisation_id` | UUID | Foreign key to Organisation |
+| `rec_attributes` | JSONB | Attribute values |
+| `rec_name` | String(255) | Record name |
+| `rec_status` | String(50) | Status |
+| `rec_priority` | String(20) | Priority |
+| `rec_tags` | String[] | Tags |
+| `rec_email` | String(255) | Email |
+| `rec_phone_number` | String(20) | Phone number |
+| `rec_external_id` | String(255) | External ID |
+| `rec_is_active` | Boolean | Active status |
+| `rec_is_archived` | Boolean | Archived status |
+| `rec_is_deleted` | Boolean | Deleted status |
+| `rec_created_at` | DateTime | Creation timestamp |
+| `rec_updated_at` | DateTime | Last update timestamp |
+| `rec_created_by` | UUID | Foreign key to User |
+| `rec_updated_by` | UUID | Foreign key to User |
+| `rec_version` | Integer | Version number |
+
+### View
+
+Defines custom views for object data.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `view_id` | UUID | Primary key |
+| `organisation_id` | UUID | Foreign key to Organisation |
+| `obj_id` | UUID | Foreign key to Object |
+| `view_name` | String(100) | View name |
+| `view_display_name` | String(150) | Display name |
+| `view_type` | Enum | Type: "table" or "kanban" |
+| `view_columns` | JSONB | Column configuration |
+| `view_filters` | JSONB | Filter configuration |
+| `view_sort_order` | JSONB | Sort configuration |
+| `view_config` | JSONB | Additional config |
+| `view_is_default` | Boolean | Default view flag |
+| `view_is_public` | Boolean | Public view flag |
+| `view_owner_id` | UUID | Foreign key to User |
+| `view_is_active` | Boolean | Active status |
+| `view_is_favorite` | Boolean | Favorite flag |
+| `view_is_archived` | Boolean | Archived status |
+| `view_usage_count` | Integer | Usage count |
+| `view_last_used` | DateTime | Last used timestamp |
+| `view_created_at` | DateTime | Creation timestamp |
+| `view_updated_at` | DateTime | Last update timestamp |
+| `view_created_by` | UUID | Foreign key to User |
+| `view_updated_by` | UUID | Foreign key to User |
+| `view_version` | Integer | Version number |
+
+### List
+
+Defines record lists/collections.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `list_id` | UUID | Primary key |
+| `organisation_id` | UUID | Foreign key to Organisation |
+| `obj_id` | UUID | Foreign key to Object |
+| `list_name` | String(100) | List name |
+| `list_display_name` | String(150) | Display name |
+| `list_description` | Text | Description |
+| `list_type` | Enum | Type: "static", "dynamic", "smart", "system" |
+| `list_filters` | JSONB | Filter configuration |
+| `list_sort_order` | JSONB | Sort configuration |
+| `list_settings` | JSONB | Additional settings |
+| `list_is_public` | Boolean | Public flag |
+| `list_is_shared` | Boolean | Shared flag |
+| `list_owner_id` | UUID | Foreign key to User |
+| `list_is_active` | Boolean | Active status |
+| `list_is_archived` | Boolean | Archived status |
+| `list_is_favorite` | Boolean | Favorite flag |
+| `list_record_count` | Integer | Cached record count |
+| `list_created_at` | DateTime | Creation timestamp |
+| `list_updated_at` | DateTime | Last update timestamp |
+| `list_created_by` | UUID | Foreign key to User |
+| `list_updated_by` | UUID | Foreign key to User |
+| `list_version` | Integer | Version number |
+
+## Reporting
+
+### SavedReport
+
+Stores saved report configurations.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `report_id` | UUID | Primary key |
+| `org_id` | UUID | Foreign key to Organisation |
+| `name` | String(255) | Report name |
+| `description` | Text | Description |
+| `config` | JSONB | Report configuration (Pydantic schema) |
+| `created_by` | UUID | Foreign key to User |
+| `created_at` | DateTime | Creation timestamp |
+| `updated_at` | DateTime | Last update timestamp |
+
+**Indexes:**
+- Index on `org_id`
+- Index on `name`
+
+### DashboardTemplate
+
+System-level dashboard templates.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `template_id` | UUID | Primary key |
+| `template_key` | String(50) | Unique template key |
+| `name` | String(255) | Template name |
+| `description` | Text | Description |
+| `icon` | String(50) | Icon identifier |
+| `category` | String(50) | Category (support, sales, qa) |
+| `template_config` | JSONB | Template configuration |
+| `default_layout` | JSONB | Default layout |
+| `is_active` | Boolean | Active status |
+| `is_system` | Boolean | System template flag |
+| `display_order` | Integer | Display order |
+| `created_at` | DateTime | Creation timestamp |
+| `updated_at` | DateTime | Last update timestamp |
+
+**Constraints:**
+- Unique constraint on `template_key`
+
+**Indexes:**
+- Index on `template_key`
+- Index on `category`
+
+### Dashboard
+
+User-created dashboards.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dashboard_id` | UUID | Primary key |
+| `org_id` | UUID | Foreign key to Organisation |
+| `name` | String(255) | Dashboard name |
+| `description` | Text | Description |
+| `template_id` | UUID | Foreign key to DashboardTemplate |
+| `layout` | JSONB | Layout configuration |
+| `settings` | JSONB | Dashboard settings |
+| `is_shared` | Boolean | Shared flag |
+| `is_public` | Boolean | Public flag |
+| `created_by` | UUID | Foreign key to User |
+| `created_at` | DateTime | Creation timestamp |
+| `updated_at` | DateTime | Last update timestamp |
+
+**Constraints:**
+- Unique constraint on (`org_id`, `name`)
+
+**Relationships:**
+- `reports` - Has many DashboardReport
+- `template` - Belongs to DashboardTemplate
+
+**Indexes:**
+- Index on `org_id`
+- Index on `name`
+- Index on `template_id`
+- Index on `created_by`
+
+### DashboardReport
+
+Links reports to dashboards as widgets.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | Primary key |
+| `dashboard_id` | UUID | Foreign key to Dashboard |
+| `report_id` | UUID | Foreign key to SavedReport |
+| `widget_title` | String(255) | Widget title override |
+| `position` | JSONB | Grid position (x, y, w, h) |
+| `widget_settings` | JSONB | Widget-specific settings |
+| `display_order` | Integer | Display order |
+| `created_at` | DateTime | Creation timestamp |
+| `updated_at` | DateTime | Last update timestamp |
+
+**Constraints:**
+- Unique constraint on (`dashboard_id`, `report_id`)
+
+**Relationships:**
+- `dashboard` - Belongs to Dashboard
+- `report` - Belongs to SavedReport
+
+**Indexes:**
+- Index on `dashboard_id`
+- Index on `report_id`
+
+### DashboardFavorite
+
+Tracks user-favorited dashboards.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `user_id` | UUID | Foreign key to User (primary key) |
+| `dashboard_id` | UUID | Foreign key to Dashboard (primary key) |
+| `created_at` | DateTime | Creation timestamp |
+
+**Relationships:**
+- `user` - Belongs to User
+- `dashboard` - Belongs to Dashboard
+
+**Indexes:**
+- Index on `user_id`
+- Index on `dashboard_id`
+- Composite index on (`user_id`, `dashboard_id`)
+
+## Association Tables
+
+### user_organisations
+
+Many-to-many relationship between users and organizations.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `u_org_id` | UUID | Primary key |
+| `u_id` | UUID | Foreign key to User |
+| `org_id` | UUID | Foreign key to Organisation |
+| `is_deleted` | Boolean | Soft delete flag |
+| `is_active` | Boolean | Active status |
+| `created_at` | DateTime | Creation timestamp |
+| `modified_at` | DateTime | Last update timestamp |
+
+### user_roles
+
+Many-to-many relationship between users and roles.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `u_id` | UUID | Foreign key to User (primary key) |
+| `r_id` | UUID | Foreign key to Role (primary key) |
+
+### user_teams
+
+Many-to-many relationship between users and teams.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `user_id` | UUID | Foreign key to User (primary key) |
+| `team_id` | UUID | Foreign key to Team (primary key) |
+| `created_at` | DateTime | Creation timestamp |
+
+### Meeting_leads
+
+Many-to-many relationship between meetings and leads.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `meeting_id` | UUID | Foreign key to Meeting (primary key) |
+| `lead_id` | UUID | Foreign key to Leads (primary key) |
+| `created_at` | Timestamp | Creation timestamp |
+
+### MeetingRecord
+
+Associates records with meetings.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `organisation_id` | UUID | Foreign key to Organisation |
+| `meeting_id` | UUID | Foreign key to Meeting (primary key) |
+| `rec_id` | UUID | Foreign key to Record (primary key) |
+| `role` | String(50) | Role in meeting |
+| `link_metadata` | JSONB | Additional metadata |
+| `added_at` | DateTime | Addition timestamp |
+| `added_by` | UUID | Foreign key to User |
+
+**Relationships:**
+- `meeting` - Belongs to Meeting
+- `record` - Belongs to Record
+
+## Database Indexes
+
+<Callout type="warning">
+The models use extensive indexing for performance. Key indexes include:
+- GIN indexes for JSONB and array columns
+- Composite indexes for common query patterns
+- Partial indexes with WHERE clauses for filtered queries
+</Callout>
+
+Common index patterns:
+- Foreign key columns
+- Timestamp columns for time-range queries
+- Status/type columns for filtering
+- Composite indexes for multi-column queries
+- Unique constraints for data integrity
+
+## Model Relationships Summary
+
+```
+User ←→ Organisation (many-to-many)
+User ←→ Team (many-to-many)
+User ←→ Role (many-to-many)
+User ←→ Templates (one-to-many)
+
+Organisation ←→ Team (one-to-many)
+Organisation ←→ Object (one-to-many)
+Organisation ←→ SavedReport (one-to-many)
+Organisation ←→ Dashboard (one-to-many)
+
+Meeting ←→ Leads (many-to-many)
+Meeting ←→ Disposition (many-to-many)
+Meeting ←→ MeetingShare (one-to-many)
+Meeting ←→ Record (many-to-many via MeetingRecord)
+
+Object ←→ Attribute (one-to-many)
+Object ←→ View (one-to-many)
+Object ←→ List (one-to-many)
+Object ←→ Record (one-to-many)
+
+Dashboard ←→ DashboardReport (one-to-many)
+DashboardReport ←→ SavedReport (many-to-one)
+
+RedFlag ←→ DetectedRedFlag (one-to-many)
+```
