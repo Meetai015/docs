@@ -1,127 +1,46 @@
 ---
 title: "Quickstart"
-description: "Get started with the Gistly Call Analytics development environment"
+description: "Get started with Gistly Call Analytics in minutes"
 icon: "bolt"
 ---
 
-<Info>
-  **Note**: This guide is for setting up the local development environment. If
-  you want to use the product, check out our [Getting Started
-  Guide](/guides/getting-started).
-</Info>
+# Quickstart
 
-# Development Quickstart
+Get up and running with Gistly Call Analytics quickly.
 
-This guide will help you set up the Gistly Call Analytics development environment on your local machine.
+## Step 1: Create Your Account
 
-## Prerequisites
+1. Go to [console.gistly.ai](https://console.gistly.ai)
+2. Sign up with your work email or Google account
+3. Verify your email address
 
-Before you begin, ensure you have the following installed:
+## Step 2: Set Up Your Organization
 
-- **Python 3.11+**: [Download Python](https://www.python.org/downloads/)
-- **Node.js 18+**: [Download Node.js](https://nodejs.org/)
-- **PostgreSQL**: [Download PostgreSQL](https://www.postgresql.org/download/)
-- **Redis**: [Download Redis](https://redis.io/download/)
-- **Git**: [Download Git](https://git-scm.com/downloads)
+1. Create a new organization or join an existing one
+2. Invite your team members
+3. Configure your organization settings
 
-## Accessing the Code
+## Step 3: Upload Your First Meeting
 
-<Note>
-  **Developer Access Required**: You must be a member of the Gistly GitHub organization to access the repositories.
-</Note>
+1. Navigate to **Meetings** in the sidebar
+2. Click **Upload Meeting**
+3. Select your audio or video file
+4. Wait for processing to complete (typically 5-10 minutes)
 
-1. **Request Access**: Contact your engineering manager to get access to the Gistly GitHub organization.
+**Supported Formats:**
+- Audio: mp3, wav, aac, m4a, ogg, flac
+- Video: mp4, mkv, avi, mov, wmv, flv, webm
 
-2. **Clone the repositories** once you have access:
-   ```bash
-   # Clone the monorepo
-   git clone git@github.com:gistly/gistly.git
-   cd gistly
-   ```
+## Step 4: View Your Analytics
 
-## Backend Setup
-
-1. **Navigate to the backend directory:**
-
-   ```bash
-   cd backend-meeting-notes
-   ```
-
-2. **Create a virtual environment:**
-
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies:**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Set up environment variables:**
-
-   Copy `.env.example` to `.env` and fill in the required values.
-
-   ```bash
-   cp .env.example .env
-   ```
-
-5. **Initialize the database:**
-
-   ```bash
-   flask db upgrade
-   ```
-
-6. **Run the development server:**
-
-   ```bash
-   flask run
-   ```
-
-   The backend will start at `http://localhost:5000`.
-
-## Frontend Setup
-
-1. **Navigate to the frontend directory:**
-
-   ```bash
-   cd ../meeting-notes-dashboard
-   ```
-
-2. **Install dependencies:**
-
-   ```bash
-   npm install
-   ```
-
-3. **Set up environment variables:**
-
-   Copy `.env.example` to `.env.local` and fill in the required values.
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-4. **Run the development server:**
-
-   ```bash
-   npm run dev
-   ```
-
-   The frontend will start at `http://localhost:3000`.
+Once processing is complete, you'll see:
+- **Transcript** — Full meeting transcription
+- **Summary** — AI-generated meeting summary
+- **Quality Scores** — Conversation quality metrics
+- **Action Items** — Extracted next steps
 
 ## Next Steps
 
 - Explore our [API Reference](/api-reference) to integrate Gistly into your applications
 - Check out our [User Guides](/guides/getting-started) to learn how to use Gistly features
 - Visit our [Support page](/resources/support) if you need help
-
-### For Gistly Team Members
-
-If you're a Gistly team member, check our internal documentation for:
-- Backend and frontend development guides
-- Contributing guidelines
-- Testing practices
-- AI tools setup

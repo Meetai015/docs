@@ -7,7 +7,7 @@ openapi: "GET /api/tickets"
 
 # Tickets API
 
-Ticket system integration for Freshdesk and custom ticketing.
+Ticket system integration and management.
 
 ## Overview
 
@@ -41,7 +41,7 @@ Authorization: Bearer {token}
       "t_subject": "Login issue",
       "t_status": "Open",
       "t_priority": "High",
-      "t_source": "freshdesk",
+      "t_source": "webhook",
       "t_external_id": "12345",
       "created_at": "2024-01-15T10:00:00Z"
     }
@@ -127,36 +127,11 @@ Get SOP compliance status.
 
 ---
 
-## Cashfree Integration
+## Webhook Integration
 
-### POST /api/cashfree/webhooks/tickets
+Tickets can be ingested via webhooks from external ticketing systems.
 
-Receive Freshdesk ticket updates via Cashfree payment gateway integration.
-
-**See:** [Webhooks API - Cashfree](/api-reference/webhooks#cashfree-webhook) for full webhook documentation
-
-**See:** [Cashfree Demo Tickets Spec](/specs/cashfree-demo-tickets) for complete implementation details
-
-### Demo Data Seeding
-
-Generate realistic Cashfree demo tickets for testing:
-
-```python
-from backend.app.models.tickets import seed_comprehensive_ticket_demo_data
-
-results = seed_comprehensive_ticket_demo_data(
-    org_id="your-org-uuid",
-    assignee_email="agent@example.com",
-    num_tickets=12
-)
-```
-
-**Creates:**
-- 12 realistic Cashfree payment gateway tickets
-- Product taxonomy mapping (Payment Gateway, Payouts, etc.)
-- SLA and SOP compliance data
-- Red flag detection rules
-- Ticket summaries
+**See:** [Webhooks API](/api-reference/webhooks) for webhook documentation.
 
 ---
 

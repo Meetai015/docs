@@ -73,7 +73,7 @@ Authorization: Bearer {token}
         "t_summary": "Call summary..."
       },
       "video": {
-        "v_url": "https://s3.amazonaws.com/...",
+        "v_url": "https://media.gistly.ai/...",
         "v_format": "mp4"
       },
       "red_flags": [
@@ -106,80 +106,6 @@ Authorization: Bearer {token}
 }
 ```
 
-**Service Code:**
-```python
-# app/services/meeting_services.py
-
-def get_all_meetings(data: dict) -> tuple:
-    """
-    Fetch meetings with filtering, pagination, and sorting.
-    """
-    try:
-        user_id = g.user_model.u_id
-        permissions = g.user_permissions
-
-        # Get accessible meeting IDs based on permissions
-        accessible_ids = get_accessible_meeting_ids(permissions, user_id)
-
-        # Build query with filters
-        query = Meeting.query.filter(Meeting.m_id.in_(accessible_ids))
-
-        # Apply date range filter
-        if data.get('from_date'):
-            query = query.filter(Meeting.m_start_time >= data['from_date'])
-        if data.get('to_date'):
-            query = query.filter(Meeting.m_end_time <= data['to_date'])
-
-        # Apply red flag filter
-        if data.get('red_flag_only'):
-            flagged_ids = db.session.query(DetectedRedFlag.drf_m_id).distinct().all()
-            query = query.filter(Meeting.m_id.in_(flagged_ids))
-
-        # Apply search
-        if data.get('search'):
-            search_term = f"%{data['search']}%"
-            query = query.join(Transcription).filter(
-                db.or_(
-                    Meeting.m_name.ilike(search_term),
-                    Transcription.t_transcript.ilike(search_term)
-                )
-            )
-
-        # Apply sorting
-        sort_by = data.get('sort_by', 'date')
-        sort_order = data.get('sort_order', 'desc')
-        if sort_by == 'date':
-            order_col = Meeting.m_start_time.desc() if sort_order == 'desc' else Meeting.m_start_time.asc()
-        elif sort_by == 'duration':
-            order_col = Meeting.m_duration.desc() if sort_order == 'desc' else Meeting.m_duration.asc()
-        else:
-            order_col = Meeting.m_name.desc() if sort_order == 'desc' else Meeting.m_name.asc()
-
-        query = query.order_by(order_col)
-
-        # Paginate
-        page = int(data.get('page', 1))
-        page_size = int(data.get('page_size', 10))
-
-        total_count = query.count()
-        meetings = query.offset((page - 1) * page_size).limit(page_size).all()
-
-        return jsonify({
-            "message": "Meetings fetched successfully.",
-            "meetings": [meeting.to_dict() for meeting in meetings],
-            "pagination": {
-                "page": page,
-                "page_size": page_size,
-                "total_count": total_count,
-                "total_pages": math.ceil(total_count / page_size),
-                "has_more": page * page_size < total_count
-            }
-        }), 200
-
-    except Exception as e:
-        logger.error(f"Error fetching meetings: {str(e)}")
-        return jsonify({"message": "Failed to fetch meetings"}), 500
-```
 
 ---
 
@@ -243,7 +169,7 @@ Content-Type: multipart/form-data
 - Video: mp4, mkv, avi, mov, wmv, flv, webm
 
 **Processing Pipeline:**
-1. File uploaded to S3
+1. File uploaded securely
 2. Transcription queued
 3. Summary generated
 4. Quality scores calculated
@@ -330,7 +256,7 @@ Authorization: Bearer {token}
       }
     ],
     "video": {
-      "v_url": "https://s3.amazonaws.com/...",
+      "v_url": "https://media.gistly.ai/...",
       "v_format": "mp4"
     },
     "permissions": {
@@ -534,4 +460,4 @@ const uploadResponse = await fetch('https://api.gistly.ai/api/v1/meetings/upload
 
 - Learn about [Reports API](/api-reference/reports)
 - Review [Error Handling](/api-reference/error-handling)
-- Explore [Backend Services](/backend/services)
+- Explore [Webhooks API](/api-reference/webhooks)

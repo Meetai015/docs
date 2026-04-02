@@ -20,8 +20,6 @@ info:
 servers:
   - url: https://api.gistly.com
     description: Production server
-  - url: https://staging-api.gistly.com
-    description: Staging server
 
 tags:
   - name: Meetings
