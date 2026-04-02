@@ -1,0 +1,381 @@
+openapi: 3.0.3
+info:
+  title: Gistly API
+  version: 1.0.0
+  description: |
+    API for meeting notes and analytics platform.
+
+    ## Authentication
+
+    All API requests require authentication via Bearer token in the Authorization header.
+
+    ```http
+    Authorization: Bearer YOUR_API_KEY
+    ```
+
+  contact:
+    name: Gistly API Support
+    email: api@gistly.com
+
+servers:
+  - url: https://api.gistly.com
+    description: Production server
+  - url: https://staging-api.gistly.com
+    description: Staging server
+
+tags:
+  - name: Meetings
+    description: Meeting management operations
+  - name: Recordings
+    description: Recording operations
+  - name: Reports
+    description: Report generation and retrieval
+  - name: Webhooks
+    description: Webhook configuration and events
+
+paths:
+  /meetings:
+    get:
+      summary: List meetings
+      description: Retrieve a paginated list of meetings
+      tags: [Meetings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          description: Filter by meeting status
+          required: false
+          schema:
+            type: string
+            enum: [scheduled, in_progress, completed, cancelled]
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Meeting'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create meeting
+      description: Create a new meeting
+      tags: [Meetings]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeetingCreate'
+      responses:
+        '201':
+          description: Meeting created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Meeting'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /meetings/{meetingId}:
+    get:
+      summary: Get meeting
+      description: Retrieve details of a specific meeting
+      tags: [Meetings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: meetingId
+          in: path
+          required: true
+          description: Meeting ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /recordings:
+    get:
+      summary: List recordings
+      description: Retrieve a list of meeting recordings
+      tags: [Recordings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: meetingId
+          in: query
+          description: Filter by meeting ID
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Recording'
+
+  /recordings/{recordingId}/transcript:
+    get:
+      summary: Get transcript
+      description: Retrieve the transcript of a recording
+      tags: [Recordings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: recordingId
+          in: path
+          required: true
+          description: Recording ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Transcript'
+
+  /webhooks:
+    post:
+      summary: Create webhook
+      description: Create a new webhook subscription
+      tags: [Webhooks]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookCreate'
+      responses:
+        '201':
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Webhook'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+
+  schemas:
+    Meeting:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        scheduledAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [scheduled, in_progress, completed, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MeetingCreate:
+      type: object
+      required:
+        - title
+        - scheduledAt
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+        scheduledAt:
+          type: string
+          format: date-time
+
+    Recording:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [processing, ready, failed]
+        duration:
+          type: integer
+          description: Duration in seconds
+        createdAt:
+          type: string
+          format: date-time
+
+    Transcript:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        recordingId:
+          type: string
+          format: uuid
+        content:
+          type: string
+          description: Full transcript text
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              speaker:
+                type: string
+              startTime:
+                type: number
+              endTime:
+                type: number
+              text:
+                type: string
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        secret:
+          type: string
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookCreate:
+      type: object
+      required:
+        - url
+        - events
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - meeting.created
+              - meeting.completed
+              - recording.ready
+              - transcript.ready
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string

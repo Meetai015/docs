@@ -1,0 +1,68 @@
+{
+  "name": "Gistly Docs",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.png",
+  "colors": {
+    "primary": "#0D9488",
+    "light": "#2DD4BF",
+    "dark": "#0F766E",
+    "anchors": "#0D9488"
+  },
+  "topbarLinks": [
+    {
+      "name": "Support",
+      "url": "mailto:support@gistly.ai"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Console",
+    "url": "https://console.gistly.ai"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Product",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["index", "product/overview", "product/features"]
+          },
+          {
+            "group": "Guides",
+            "pages": ["guides/getting-started", "guides/troubleshooting"]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Interactive API Docs",
+            "pages": ["api-reference/index"]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Help",
+            "pages": [
+              "resources/faq",
+              "resources/support",
+              "resources/changelog"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footerSocials": {
+    "twitter": "https://twitter.com/gistly_ai",
+    "github": "https://github.com/Meetai015",
+    "linkedin": "https://linkedin.com/company/gistly-ai"
+  }
+}

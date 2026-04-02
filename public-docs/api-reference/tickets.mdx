@@ -131,9 +131,32 @@ Get SOP compliance status.
 
 ### POST /api/cashfree/webhooks/tickets
 
-Receive Freshdesk ticket updates via Cashfree.
+Receive Freshdesk ticket updates via Cashfree payment gateway integration.
 
-See [Webhooks API](/api-reference/webhooks) for details.
+**See:** [Webhooks API - Cashfree](/api-reference/webhooks#cashfree-webhook) for full webhook documentation
+
+**See:** [Cashfree Demo Tickets Spec](/specs/cashfree-demo-tickets) for complete implementation details
+
+### Demo Data Seeding
+
+Generate realistic Cashfree demo tickets for testing:
+
+```python
+from backend.app.models.tickets import seed_comprehensive_ticket_demo_data
+
+results = seed_comprehensive_ticket_demo_data(
+    org_id="your-org-uuid",
+    assignee_email="agent@example.com",
+    num_tickets=12
+)
+```
+
+**Creates:**
+- 12 realistic Cashfree payment gateway tickets
+- Product taxonomy mapping (Payment Gateway, Payouts, etc.)
+- SLA and SOP compliance data
+- Red flag detection rules
+- Ticket summaries
 
 ---
 

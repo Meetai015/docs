@@ -1,0 +1,112 @@
+---
+title: "Troubleshooting"
+description: "Solutions for common issues with Gistly"
+icon: "wrench"
+---
+
+# Troubleshooting
+
+Having issues? Find solutions to common problems below.
+
+## Recording Issues
+
+### Recording Not Appearing
+
+<AccordionGroup>
+  <Accordion
+    title="I recorded a meeting but it's not in Gistly"
+    icon="circle-question"
+  >
+    **Possible causes:** - Recording is still processing (allow 5-10 minutes) -
+    Meeting platform integration is disconnected - Recording was not saved to
+    cloud **Solutions:** 1. Check **Meetings** → **Processing** for pending
+    items 2. Verify integration status in **Settings** → **Integrations** 3. Try
+    manual upload if automatic ingestion isn't working
+  </Accordion>
+
+  <Accordion title="Processing is stuck" icon="spinner">
+    If a recording has been processing for more than 30 minutes: 1. Note the
+    meeting ID from the Processing page 2. Contact support with the meeting ID
+    3. We'll investigate and restart processing if needed
+  </Accordion>
+</AccordionGroup>
+
+### Audio Quality Issues
+
+<AccordionGroup>
+  <Accordion title="Transcript has many errors" icon="file-circle-xmark">
+    Poor audio quality can affect transcription accuracy. **Tips for better
+    results:** - Use headsets or quality microphones - Minimize background noise
+    - Ensure stable internet connection - Avoid speaking over each other
+  </Accordion>
+
+  <Accordion title="Speakers not identified correctly" icon="users">
+    Speaker diarization works best when: - Each person has a distinct voice -
+    People speak one at a time - Audio quality is clear You can manually edit
+    speaker labels in the transcript view.
+  </Accordion>
+</AccordionGroup>
+
+## Integration Issues
+
+### Microsoft Teams
+
+<AccordionGroup>
+  <Accordion title="Connection failed" icon="plug-circle-xmark">
+    **Check these items:** 1. You have admin consent for the Gistly app in Azure
+    AD 2. Required API permissions are granted 3. Your Teams account has
+    recording permissions Try disconnecting and reconnecting the integration.
+  </Accordion>
+
+  <Accordion title="Recordings not syncing" icon="rotate">
+    Ensure cloud recording is enabled in Teams: 1. Open Teams Admin Center 2. Go
+    to **Meetings** → **Meeting policies** 3. Enable **Cloud recording**
+  </Accordion>
+</AccordionGroup>
+
+## Account Issues
+
+<AccordionGroup>
+  <Accordion title="Can't log in" icon="lock">
+    **Try these steps:** 1. Reset your password via the login page 2. Clear
+    browser cache and cookies 3. Try a different browser 4. Check if your
+    account was deactivated by an admin
+  </Accordion>
+
+  <Accordion title="Not seeing team meetings" icon="eye-slash">
+    You may only see meetings you're authorized to view. Check with your
+    workspace admin about viewing permissions.
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Dashboard is slow" icon="gauge-low">
+    **Improve performance:**
+    1. Use filters to reduce data displayed
+    2. Clear browser cache
+    3. Try a different browser
+    4. Check your internet connection
+  </Accordion>
+  
+  <Accordion title="Large files failing to upload" icon="file-arrow-up">
+    For large recordings (>500 MB):
+    1. Ensure stable internet connection
+    2. Don't close the browser during upload
+    3. Try compressing the file if possible
+    4. Contact support for bulk uploads
+  </Accordion>
+</AccordionGroup>
+
+## Still Need Help?
+
+<Card title="Contact Support" icon="envelope" href="mailto:support@gistly.ai">
+  Email us at **support@gistly.ai** with: - Your account email - Description of
+  the issue - Screenshots if applicable - Meeting ID (if relevant)
+</Card>
+
+<Info>
+  For urgent issues affecting your entire organization, indicate "URGENT" in
+  your email subject.
+</Info>

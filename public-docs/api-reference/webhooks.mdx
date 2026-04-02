@@ -227,81 +227,95 @@ POST /api/v1/freshdesk/webhooks/conversation-updated
 
 ### POST /api/cashfree/webhooks/tickets
 
-Receives Freshdesk ticket updates via Cashfree integration.
+Receives Freshdesk ticket updates via Cashfree payment gateway integration.
 
-**Authentication:** API key + Org ID
+**Authentication:** API key in header (validated against `api_keys` table)
 
 **Request:**
 ```http
-POST /api/v1/cashfree/webhooks/tickets
+POST /api/cashfree/webhooks/tickets
 X-API-Key: {your-api-key}
-X-Org-Id: {org-uuid}
+Content-Type: application/json
 
 {
-  "ticket_id": 12345,
-  "subject": "Payment issue",
-  "status": "Open",
-  "priority": "Urgent",
+  "ticket_id": "FD-123456",
+  "ticket_url": "https://cashfree.freshdesk.com/a/tickets/123456",
+  "ticket_subject": "Payment processing issue",
+  "status": "open",
+  "priority": "high",
+  "mid": "MID123456",
+  "jira_ticket_id": "PROJ-789",
+  "cf_ref_id": "CFR-123456",
+  "agent_name": "John Doe",
+  "agent_email": "john@cashfree.com",
+  "group": "Care",
+  "care_product_type": "Payment Gateway",
+  "issue_category": "Refund",
+  "sub_category": "Failed",
+  "tags": ["urgent", "payment"],
+  "conversation_history": [
+    {
+      "responder_type": "merchant",
+      "body": "<p>Payment not processing...</p>",
+      "private": false
+    },
+    {
+      "responder_type": "agent",
+      "body": "<p>Looking into this...</p>",
+      "private": false
+    }
+  ],
   "custom_fields": {
-    "cf_amount": "5000",
-    "cf_transaction_id": "txn-123"
+    "care_priority": "P1",
+    "source_channel": "Email"
   }
 }
 ```
 
-**Security:**
-- Validates API key
-- Checks org_id membership
-- Runs every 6 hours for batch sync
-
-**Service Code:**
-```python
-# app/routes/cashfree_routes.py
-
-@cashfree_routes.route("/webhooks/tickets", methods=["POST"])
-def process_cashfree_ticket():
-    """
-    Process Freshdesk ticket via Cashfree integration.
-    """
-    try:
-        # Validate API key
-        api_key = request.headers.get('X-API-Key')
-        org_id = request.headers.get('X-Org-Id')
-
-        # Get org by API key
-        org = Organisation.query.filter_by(
-            api_key=api_key,
-            org_id=org_id
-        ).first()
-
-        if not org:
-            return jsonify({"message": "Invalid credentials"}), 401
-
-        # Get ticket data
-        ticket_data = request.get_json()
-
-        # Store raw payload
-        ticket = Ticket(
-            t_org_id=org.org_id,
-            t_source='cashfree',
-            t_external_id=str(ticket_data['ticket_id']),
-            t_subject=ticket_data['subject'],
-            t_status=ticket_data['status'],
-            t_raw_payload=ticket_data
-        )
-
-        db.session.add(ticket)
-        db.session.commit()
-
-        return jsonify({
-            "message": "Ticket stored successfully",
-            "t_id": str(ticket.t_id)
-        }), 201
-
-    except Exception as e:
-        logger.error(f"Error processing Cashfree webhook: {str(e)}")
-        return jsonify({"message": "Failed to process ticket"}), 500
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Ticket data stored successfully",
+  "ticket_id": "FD-123456",
+  "record_id": "uuid-here",
+  "received_at": "2025-01-24T10:30:00Z"
+}
 ```
+
+**Error Responses:**
+
+| Code | Error | Description |
+|------|-------|-------------|
+| 401 | `INVALID_API_KEY` | Missing or invalid API key |
+| 400 | `INVALID_PAYLOAD` | Request body is not valid JSON |
+| 404 | `MISSING_ORG_ID` | Organization not found for API key |
+| 500 | `PROCESSING_ERROR` | Internal server error |
+
+**Security:**
+- Validates API key against `api_keys` table
+- Returns `org_id` for data scoping
+- Stores raw payload in `cashfree_tickets` table for audit trail
+- Normalizes ticket data into `tickets` and `ticket_messages` tables
+
+**Product Taxonomy Mapping:**
+The webhook automatically maps Cashfree custom fields to product taxonomy:
+- `care_product_type` → Product (e.g., "Payment Gateway")
+- `issue_category` → Category (e.g., "Refund")
+- `sub_category` → Subcategory (e.g., "Failed")
+
+**Processing Flow:**
+1. Validate API key and get `org_id`
+2. Extract ticket ID from payload
+3. Store raw payload in `cashfree_tickets` table
+4. Parse and normalize ticket fields
+5. Extract conversation history messages
+6. Map product taxonomy
+7. Create/update ticket in `tickets` table (upsert)
+8. Create messages in `ticket_messages` table
+9. Return success response
+
+**See:** [Cashfree Demo Tickets Spec](/specs/cashfree-demo-tickets) for complete implementation details
 
 ---
 
