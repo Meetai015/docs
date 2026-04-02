@@ -15,10 +15,10 @@ info:
 
   contact:
     name: Gistly API Support
-    email: api@gistly.com
+    email: notes@gistly.ai
 
 servers:
-  - url: https://api.gistly.com
+  - url: https://api.gistly.ai
     description: Production server
 
 tags:

@@ -392,54 +392,29 @@ curl -X GET https://api.gistly.ai/api/v1/meetings/all \
 
 ---
 
-## Frontend Integration
+## Integration Examples
 
-### Login Flow
+### Login with Credentials
 
-```typescript
-// src/services/api/auth/signin-api.ts
-export async function signInWithCredentials(
-  email: string,
-  password: string
-): Promise<User> {
-  const response = await postAPI('/auth/login', {
-    u_email: email,
-    u_password: password,
-    u_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-  });
-
-  // Save token to localStorage
-  saveItemToLocalStorage('user', response);
-
-  return response;
-}
+```bash
+curl -X POST https://api.gistly.ai/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "u_email": "user@example.com",
+    "u_password": "YourPassword123!"
+  }'
 ```
 
-### Google OAuth Flow
+### Using the Token
 
-```typescript
-// Get Google ID token from frontend
-const googleIdToken = await getGoogleIdToken();
-
-// Send to backend
-const response = await postAPI('/auth/google', {
-  id_token: googleIdToken,
-  u_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-});
-
-// Save user with token
-saveItemToLocalStorage('user', response);
+```bash
+curl -X GET https://api.gistly.ai/api/v1/meetings/all \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
-### Protected API Calls
-
-```typescript
-// Token is automatically included from localStorage
-const meetings = await getAPI('/meetings/all', { page: '1' });
-
-// If 401, automatic redirect to sign-in
-// See: src/services/api/api-utils.ts
-```
+<Warning>
+  Store access tokens securely. Avoid storing tokens in browser localStorage in production — use HttpOnly cookies or secure token management instead.
+</Warning>
 
 ---
 
