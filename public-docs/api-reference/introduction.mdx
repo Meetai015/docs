@@ -1,33 +1,73 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: "API Introduction"
+description: "Get started with the Gistly API"
+icon: "code"
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+# Gistly API
 
-## Welcome
+The Gistly API lets you programmatically access conversation intelligence data — meetings, transcripts, analytics, reports, and more.
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+## Base URL
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+```
+https://api.gistly.com
+```
 
 ## Authentication
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+All API requests require a Bearer token in the `Authorization` header:
+
+```http
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+To get your API token, log in to [console.gistly.ai](https://console.gistly.ai) and navigate to **Settings > API Keys**.
+
+See the [Authentication guide](/api-reference/authentication) for details on obtaining and managing tokens.
+
+## Rate Limits
+
+API requests are rate limited to **1000 requests per hour** per API key. Rate limit headers are included in every response:
+
+```http
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1704110400
+```
+
+## Response Format
+
+All responses use JSON. Successful responses include a `message` field:
 
 ```json
-"security": [
-  {
-    "bearerAuth": []
+{
+  "message": "Meetings fetched successfully.",
+  "meetings": [...],
+  "pagination": {
+    "page": 1,
+    "page_size": 10,
+    "total_count": 42,
+    "total_pages": 5
   }
-]
+}
 ```
+
+Error responses follow a consistent format. See [Error Handling](/api-reference/error-handling) for details.
+
+## Quick Links
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/api-reference/authentication">
+    Learn how to authenticate API requests
+  </Card>
+  <Card title="Meetings API" icon="video" href="/api-reference/meetings">
+    Upload and query meeting recordings
+  </Card>
+  <Card title="Reports API" icon="chart-bar" href="/api-reference/reports">
+    Access analytics and reports
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/api-reference/webhooks">
+    Receive real-time event notifications
+  </Card>
+</CardGroup>

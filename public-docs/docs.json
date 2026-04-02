@@ -1,25 +1,25 @@
 {
-  "theme": "mint",
-  "name": "Gistly Docs",
+  "theme": "sequoia",
+  "name": "Gistly",
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
   },
-  "favicon": "/favicon.png",
+  "favicon": "/favicon.svg",
   "colors": {
-    "primary": "#0D9488",
-    "light": "#2DD4BF",
-    "dark": "#0F766E"
+    "primary": "#7C5CFC",
+    "light": "#9B82FC",
+    "dark": "#5A3FD6"
   },
   "topbarLinks": [
     {
-      "name": "Support",
-      "url": "mailto:notes@gistly.ai"
+      "name": "Website",
+      "url": "https://gistly.ai"
     }
   ],
   "topbarCtaButton": {
-    "name": "Console",
-    "url": "https://console.gistly.ai"
+    "name": "Get a Demo",
+    "url": "https://gistly.ai/contact"
   },
   "navigation": {
     "tabs": [
@@ -32,7 +32,7 @@
           },
           {
             "group": "Guides",
-            "pages": ["guides/getting-started", "guides/troubleshooting"]
+            "pages": ["quickstart", "guides/getting-started", "guides/troubleshooting"]
           }
         ]
       },
@@ -40,8 +40,20 @@
         "tab": "API Reference",
         "groups": [
           {
-            "group": "Interactive API Docs",
-            "pages": ["api-reference/index"]
+            "group": "Getting Started",
+            "pages": ["api-reference/introduction", "api-reference/authentication", "api-reference/error-handling"]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api-reference/meetings",
+              "api-reference/reports",
+              "api-reference/organizations",
+              "api-reference/users",
+              "api-reference/tickets",
+              "api-reference/objects",
+              "api-reference/webhooks"
+            ]
           }
         ]
       },
@@ -61,9 +73,7 @@
     ]
   },
   "footerSocials": {
-    "twitter": "https://twitter.com/gistly_ai",
-    "github": "https://github.com/gistly-ai",
-    "linkedin": "https://linkedin.com/company/gistly-ai"
+    "linkedin": "https://linkedin.com/company/gistly-ai",
+    "website": "https://gistly.ai"
   }
 }
-
