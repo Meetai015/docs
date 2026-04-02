@@ -2,8 +2,8 @@
   "theme": "sequoia",
   "name": "Gistly",
   "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "light": "/logo/gistly-icon-sm.png",
+    "dark": "/logo/gistly-icon-sm.png"
   },
   "favicon": "/favicon.svg",
   "colors": {
