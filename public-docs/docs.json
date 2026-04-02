@@ -1,4 +1,5 @@
 {
+  "theme": "mint",
   "name": "Gistly Docs",
   "logo": {
     "light": "/logo/light.svg",
